@@ -2,13 +2,13 @@
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { STORAGE_BUCKET, VAT_RATE } from '../config.js';
-import { listCustomers, listLocations, listEquipment, listStaff, listProducts } from '../db.js';
+import { listCustomers, listLocations, listEquipment, listStaff, listProducts, getSettings } from '../db.js';
 import { getProfile, isAdmin, role } from '../auth.js';
 import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
 import {
-  WO_TYPE, WO_STATUS, WO_PRIORITY, fmtDate, fmtDateTime, money, toLocalInput,
+  WO_TYPE, WO_STATUS, WO_PRIORITY, fmtDate, fmtDateTime, money, toLocalInput, isOverdue,
 } from '../fmt.js';
 import { signaturePad } from './signature.js';
 
@@ -16,6 +16,12 @@ export async function render(container, param) {
   if (param === 'new') return woForm(container);
   if (param) return renderDetail(container, param);
   return renderList(container);
+}
+
+// Open job past its due date
+function woOverdue(w) {
+  if (['done', 'invoiced', 'cancelled'].includes(w.status)) return false;
+  return isOverdue(w.due_date);
 }
 
 // ---------------- List ----------------
@@ -61,6 +67,7 @@ async function renderList(container) {
           w.title,
         ].filter(Boolean).join(' · ')),
       ]),
+      woOverdue(w) ? el('span', { class: 'badge urgent' }, 'Overdue') : null,
       w.priority === 'urgent' || w.priority === 'high'
         ? el('span', { class: `badge ${w.priority}` }, WO_PRIORITY[w.priority]) : null,
       el('span', { class: `badge ${w.status}` }, WO_STATUS[w.status] || w.status),
@@ -110,6 +117,7 @@ async function woForm(container) {
     type: el('select', {}, Object.entries(WO_TYPE).map(([v, l]) => el('option', { value: v, selected: v === 'repair' }, l))),
     priority: el('select', {}, Object.entries(WO_PRIORITY).map(([v, l]) => el('option', { value: v, selected: v === 'normal' }, l))),
     scheduled: el('input', { type: 'datetime-local' }),
+    due: el('input', { type: 'date' }),
     assigned: el('select', {}, [el('option', { value: '' }, '— Unassigned —'),
       ...staff.map((s) => el('option', { value: s.id }, s.full_name || s.email))]),
     title: el('input', {}),
@@ -129,6 +137,7 @@ async function woForm(container) {
       priority: f.priority.value,
       status,
       scheduled_at: f.scheduled.value ? new Date(f.scheduled.value).toISOString() : null,
+      due_date: f.due.value || null,
       assigned_to: f.assigned.value || null,
       title: f.title.value.trim() || null,
       description: f.description.value.trim() || null,
@@ -151,6 +160,7 @@ async function woForm(container) {
       fieldRow('Type', f.type),
       fieldRow('Priority', f.priority),
       fieldRow('Scheduled time', f.scheduled),
+      fieldRow('Due date', f.due),
       fieldRow('Assign to', f.assigned),
       fieldRow('Title', f.title, true),
       fieldRow('Description', f.description, true),
@@ -183,6 +193,7 @@ async function renderDetail(container, id) {
       el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
         el('h2', { style: { margin: 0 } }, `Job #${wo.number}`),
         el('div', { class: 'row' }, [
+          woOverdue(wo) ? el('span', { class: 'badge urgent' }, 'Overdue') : null,
           el('span', { class: `badge ${wo.priority}` }, WO_PRIORITY[wo.priority]),
           el('span', { class: `badge ${wo.status}` }, WO_STATUS[wo.status]),
         ]),
@@ -195,6 +206,7 @@ async function renderDetail(container, id) {
         ['Location', wo.locations?.name],
         ['Equipment', wo.equipment && [wo.equipment.brand, wo.equipment.model].filter(Boolean).join(' ')],
         ['Scheduled', fmtDateTime(wo.scheduled_at)],
+        ['Due date', fmtDate(wo.due_date)],
         ['Assigned', wo.profiles?.full_name],
         ['Created', fmtDate(wo.created_at)],
         ['Labour hours', wo.labor_hours],
@@ -266,10 +278,13 @@ async function renderDetail(container, id) {
     // --- Invoice ---
     const invoiceSection = (isAdmin() || role() === 'office')
       ? el('div', { class: 'card' }, [
-          el('h3', { style: { marginTop: 0 } }, 'Invoice'),
+          el('h3', { style: { marginTop: 0 } }, 'Invoicing'),
           wo.status === 'invoiced'
             ? el('div', { class: 'muted' }, 'This job has been invoiced.')
-            : btn('Create invoice from job', () => makeInvoice(wo, parts, reload), { class: 'btn-primary' }),
+            : el('div', { class: 'row' }, [
+                btn('Create invoice', () => makeInvoice(wo, parts, 'invoice', reload), { class: 'btn-primary' }),
+                btn('Create quote', () => makeInvoice(wo, parts, 'quote', reload), { class: 'btn-ghost' }),
+              ]),
         ])
       : null;
 
@@ -378,6 +393,7 @@ async function editWo(wo, staff, reload) {
     type: el('select', {}, Object.entries(WO_TYPE).map(([v, l]) => el('option', { value: v, selected: v === wo.type }, l))),
     priority: el('select', {}, Object.entries(WO_PRIORITY).map(([v, l]) => el('option', { value: v, selected: v === wo.priority }, l))),
     scheduled: el('input', { type: 'datetime-local', value: wo.scheduled_at ? toLocalInput(wo.scheduled_at) : '' }),
+    due: el('input', { type: 'date', value: wo.due_date || '' }),
     assigned: el('select', {}, [el('option', { value: '' }, '— Unassigned —'),
       ...staff.map((s) => el('option', { value: s.id, selected: s.id === wo.assigned_to }, s.full_name || s.email))]),
     title: el('input', { value: wo.title || '' }),
@@ -389,6 +405,7 @@ async function editWo(wo, staff, reload) {
       fieldRow('Type', f.type),
       fieldRow('Priority', f.priority),
       fieldRow('Scheduled time', f.scheduled),
+      fieldRow('Due date', f.due),
       fieldRow('Assign to', f.assigned),
       fieldRow('Title', f.title, true),
       fieldRow('Description', f.description, true),
@@ -398,6 +415,7 @@ async function editWo(wo, staff, reload) {
         type: f.type.value,
         priority: f.priority.value,
         scheduled_at: f.scheduled.value ? new Date(f.scheduled.value).toISOString() : null,
+        due_date: f.due.value || null,
         assigned_to: f.assigned.value || null,
         title: f.title.value.trim() || null,
         description: f.description.value.trim() || null,
@@ -487,15 +505,18 @@ function completeWo(wo, reload) {
   });
 }
 
-// ---- Invoice from job ----
-async function makeInvoice(wo, parts, reload) {
-  if (!(await confirmDialog('Create an invoice from this job?', { danger: false, confirmLabel: 'Create' }))) return;
+// ---- Invoice / quote from job ----
+async function makeInvoice(wo, parts, kind, reload) {
+  const label = kind === 'quote' ? 'quote' : 'invoice';
+  if (!(await confirmDialog(`Create a ${label} from this job?`, { danger: false, confirmLabel: 'Create' }))) return;
   const me = getProfile();
+  const settings = await getSettings().catch(() => ({}));
+  const laborRate = Number(settings?.labor_rate) || 0;
   const { data: inv, error } = await sb.from('invoices').insert({
-    kind: 'invoice',
+    kind,
     customer_id: wo.customer_id,
     work_order_id: wo.id,
-    vat_rate: VAT_RATE,
+    vat_rate: settings?.vat_rate ?? VAT_RATE,
     created_by: me?.id || null,
   }).select('id').single();
   if (error) { toast(error.message, 'err'); return; }
@@ -507,14 +528,14 @@ async function makeInvoice(wo, parts, reload) {
     unit_price: p.unit_price || 0,
   }));
   if (wo.labor_hours) {
-    lines.push({ invoice_id: inv.id, description: 'Labour', quantity: wo.labor_hours, unit_price: 0 });
+    lines.push({ invoice_id: inv.id, description: 'Labour', quantity: wo.labor_hours, unit_price: laborRate });
   }
   if (lines.length) {
     const { error: le } = await sb.from('invoice_lines').insert(lines);
-    if (le) { toast('Invoice created but lines failed: ' + le.message, 'err'); }
+    if (le) { toast(`${label} created but lines failed: ` + le.message, 'err'); }
   }
-  await sb.from('work_orders').update({ status: 'invoiced' }).eq('id', wo.id);
-  toast('Invoice created.');
+  if (kind === 'invoice') await sb.from('work_orders').update({ status: 'invoiced' }).eq('id', wo.id);
+  toast(`${kind === 'quote' ? 'Quote' : 'Invoice'} created.`);
   navigate('/reikningar/' + inv.id);
 }
 

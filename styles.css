@@ -170,6 +170,13 @@ button:disabled { opacity: .55; cursor: default; }
 .badge.urgent, .badge.high { background: rgba(209,59,82,.13); color: #b02a41; }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+
+.meter { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.meter > span { display: block; height: 100%; background: var(--grad); }
+.meter.warn > span { background: var(--warn); }
+.meter.due > span { background: var(--danger); }
+a.linkish { color: var(--brand-mid); text-decoration: none; }
+a.linkish:hover { text-decoration: underline; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 12px; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow-sm); }
 .stat .n { font-size: 26px; font-weight: 700; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }

@@ -132,10 +132,17 @@ async function renderDetail(container, id) {
         ]),
       ]),
       el('div', { class: 'muted', style: { marginTop: '8px' } },
-        [customer.kennitala && ('Reg. ' + customer.kennitala), customer.phone, customer.email, customer.contact_name]
-          .filter(Boolean).join(' · ')),
+        joinDots([
+          customer.kennitala ? ('Reg. ' + customer.kennitala) : null,
+          telLink(customer.phone),
+          mailLink(customer.email),
+          customer.contact_name || null,
+        ])),
       (customer.address || customer.city) ? el('div', { class: 'muted', style: { marginTop: '4px' } },
-        [customer.address, customer.postal_code, customer.city].filter(Boolean).join(', ')) : null,
+        joinDots([
+          [customer.address, customer.postal_code, customer.city].filter(Boolean).join(', '),
+          mapsLink([customer.address, customer.postal_code, customer.city]),
+        ])) : null,
       customer.notes ? el('p', {}, customer.notes) : null,
     ]);
 
@@ -147,6 +154,7 @@ async function renderDetail(container, id) {
             el('div', { class: 'grow' }, [
               el('div', { class: 'title' }, l.name || l.address || 'Location'),
               el('div', { class: 'sub' }, [l.address, l.city, l.access_notes].filter(Boolean).join(' · ')),
+              mapsLink([l.address, l.postal_code, l.city]),
             ]),
             btn('Edit', () => locationForm(id, l, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
           ])))
@@ -190,7 +198,7 @@ async function renderDetail(container, id) {
         ? el('div', {}, contacts.map((ct) => el('div', { class: 'list-item' }, [
             el('div', { class: 'grow' }, [
               el('div', { class: 'title' }, [ct.name, ct.is_primary ? '★' : ''].filter(Boolean).join(' ')),
-              el('div', { class: 'sub' }, [ct.role, ct.phone, ct.email].filter(Boolean).join(' · ')),
+              el('div', { class: 'sub' }, joinDots([ct.role || null, telLink(ct.phone), mailLink(ct.email)])),
             ]),
             btn('Edit', () => contactForm(id, ct, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
             btn('✕', async () => {
@@ -252,6 +260,23 @@ function headRow(title, onAdd) {
     el('h3', { style: { margin: 0 } }, title),
     btn('+ Add', onAdd, { class: 'btn-ghost btn-sm' }),
   ]);
+}
+
+// Field-friendly links
+function telLink(phone) {
+  return phone ? el('a', { class: 'linkish', href: 'tel:' + String(phone).replace(/\s+/g, '') }, '📞 ' + phone) : null;
+}
+function mailLink(email) {
+  return email ? el('a', { class: 'linkish', href: 'mailto:' + email }, '✉︎ ' + email) : null;
+}
+function mapsLink(parts, label = '📍 Open in Maps') {
+  const q = parts.filter(Boolean).join(', ');
+  return q ? el('a', { class: 'linkish', href: 'https://maps.google.com/?q=' + encodeURIComponent(q), target: '_blank', rel: 'noopener' }, label) : null;
+}
+function joinDots(nodes) {
+  const out = [];
+  nodes.filter(Boolean).forEach((n, i) => { if (i) out.push(' · '); out.push(n); });
+  return out;
 }
 
 function locationForm(customerId, existing, onDone) {

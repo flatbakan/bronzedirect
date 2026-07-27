@@ -42,3 +42,26 @@ export const todayISO = () => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
+
+// ---- Bulb-life helpers ----
+export function bulbLife(equip, settings) {
+  return Number(equip?.bulb_life_hours ?? settings?.default_bulb_life_hours ?? 0) || 0;
+}
+export function bulbPct(equip, settings) {
+  const life = bulbLife(equip, settings);
+  if (!life || equip?.current_bulb_hours == null) return null;
+  return Math.min(100, Math.round((Number(equip.current_bulb_hours) / life) * 100));
+}
+export function isBulbDue(equip, settings) {
+  const pct = bulbPct(equip, settings);
+  return pct != null && pct >= 100;
+}
+
+// True if a date (yyyy-mm-dd) or timestamp is in the past (end-of-day for dates).
+export function isOverdue(v, endOfDay = true) {
+  if (!v) return false;
+  const d = new Date(v);
+  if (isNaN(d)) return false;
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(String(v))) d.setHours(23, 59, 59, 999);
+  return d.getTime() < Date.now();
+}

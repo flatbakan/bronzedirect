@@ -38,6 +38,12 @@ export async function listProducts({ category, activeOnly = true } = {}) {
   return data || [];
 }
 
+export async function getSettings() {
+  const { data, error } = await sb.from('company_settings').select('*').eq('id', 1).maybeSingle();
+  if (error) throw error;
+  return data || {};
+}
+
 export async function listStaff({ activeOnly = true } = {}) {
   let q = sb.from('profiles').select('*').order('full_name');
   if (activeOnly) q = q.eq('is_active', true);

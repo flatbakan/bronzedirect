@@ -2,8 +2,13 @@
 import { el, mount } from '../render.js';
 import { sb } from '../supabase.js';
 import { getProfile } from '../auth.js';
-import { WO_TYPE, WO_STATUS, fmtDateTime } from '../fmt.js';
+import { getSettings } from '../db.js';
+import { WO_TYPE, WO_STATUS, fmtDateTime, fmtDate, isOverdue, isBulbDue } from '../fmt.js';
 import { errorView } from '../ui.js';
+
+function jobIsOverdue(w) {
+  return isOverdue(w.due_date) || (w.scheduled_at && new Date(w.scheduled_at).getTime() < Date.now());
+}
 
 function woLink(wo) {
   const cust = wo.customers?.name || 'Unknown';
@@ -28,23 +33,47 @@ export async function render(container) {
     const sel = '*, customers(name)';
     const openStatuses = ['new', 'scheduled', 'in_progress'];
 
-    const [openRes, mineRes] = await Promise.all([
+    const [openRes, mineRes, equipRes, settings] = await Promise.all([
       sb.from('work_orders').select(sel).in('status', openStatuses).order('scheduled_at', { nullsFirst: false }),
       sb.from('work_orders').select(sel).eq('assigned_to', me?.id || '00000000-0000-0000-0000-000000000000')
         .in('status', openStatuses).order('scheduled_at', { nullsFirst: false }),
+      sb.from('equipment').select('*, customers(name), locations(name)').neq('status', 'removed'),
+      getSettings(),
     ]);
     if (openRes.error) throw openRes.error;
     const open = openRes.data || [];
     const mine = mineRes.data || [];
+    const overdue = open.filter(jobIsOverdue);
+    const bulbsDue = (equipRes.data || []).filter((e) => isBulbDue(e, settings));
 
     const byStatus = (s) => open.filter((w) => w.status === s).length;
 
     const stats = el('div', { class: 'stat-grid' }, [
       stat(open.length, 'Open jobs'),
-      stat(byStatus('scheduled'), 'Scheduled'),
+      stat(overdue.length, 'Overdue'),
       stat(byStatus('in_progress'), 'In progress'),
-      stat(byStatus('new'), 'New / unassigned'),
+      stat(bulbsDue.length, 'Bulbs due'),
     ]);
+
+    const overdueSection = overdue.length ? el('div', {}, [
+      el('div', { class: 'page-head', style: { marginTop: '20px' } }, el('h2', {}, '⚠︎ Overdue')),
+      el('div', {}, overdue.map(woLink)),
+    ]) : null;
+
+    const bulbsSection = bulbsDue.length ? el('div', {}, [
+      el('div', { class: 'page-head', style: { marginTop: '20px' } }, [
+        el('h2', {}, '💡 Bulbs due'),
+        el('span', { class: 'spacer' }),
+        el('a', { class: 'link-btn', href: '#/taeki' }, 'Equipment →'),
+      ]),
+      el('div', {}, bulbsDue.slice(0, 10).map((e) => el('a', { class: 'list-item', href: `#/taeki/${e.id}` }, [
+        el('div', { class: 'grow' }, [
+          el('div', { class: 'title' }, [e.brand, e.model].filter(Boolean).join(' ') || 'Sunbed'),
+          el('div', { class: 'sub' }, [e.customers?.name, e.locations?.name].filter(Boolean).join(' · ')),
+        ]),
+        el('span', { class: 'badge urgent' }, `${e.current_bulb_hours ?? 0} hrs`),
+      ]))),
+    ]) : null;
 
     const mineSection = el('div', {}, [
       el('div', { class: 'page-head', style: { marginTop: '20px' } }, el('h2', {}, 'My jobs')),
@@ -67,6 +96,8 @@ export async function render(container) {
     mount(container, el('div', {}, [
       el('div', { class: 'page-head' }, el('h2', {}, `Hello${me?.full_name ? ', ' + me.full_name.split(' ')[0] : ''}`)),
       stats,
+      overdueSection,
+      bulbsSection,
       mineSection,
       allSection,
     ]));

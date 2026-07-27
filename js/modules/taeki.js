@@ -1,12 +1,12 @@
 // modules/taeki.js — Equipment (sunbeds): list, profile, bulb changes.
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
-import { listCustomers, listLocations, listProducts, listEquipment } from '../db.js';
+import { listCustomers, listLocations, listProducts, listEquipment, getSettings } from '../db.js';
 import { getProfile } from '../auth.js';
 import { modal, fieldRow, toast, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
-import { EQUIP_STATUS, fmtDate, todayISO } from '../fmt.js';
+import { EQUIP_STATUS, fmtDate, todayISO, bulbLife, bulbPct, isBulbDue } from '../fmt.js';
 
 export async function render(container, param) {
   if (param === 'new') return equipForm(container, null);
@@ -17,25 +17,29 @@ export async function render(container, param) {
 // ---------------- List ----------------
 async function renderList(container) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
-  let rows;
-  try { rows = await listEquipment(); }
+  let rows, settings;
+  try { [rows, settings] = await Promise.all([listEquipment(), getSettings()]); }
   catch (e) { return errorView(container, e.message); }
 
   const search = el('input', { type: 'search', placeholder: 'Search (model, serial, customer)…', style: { maxWidth: '320px' } });
+  const dueOnly = el('input', { type: 'checkbox' });
   const listWrap = el('div', {});
   function draw() {
     const t = search.value.trim().toLowerCase();
-    const list = rows.filter((e) => !t ||
-      [e.brand, e.model, e.serial_number, e.customers?.name].some((x) => (x || '').toLowerCase().includes(t)));
+    const list = rows.filter((e) =>
+      (!dueOnly.checked || isBulbDue(e, settings)) &&
+      (!t || [e.brand, e.model, e.serial_number, e.customers?.name].some((x) => (x || '').toLowerCase().includes(t))));
     if (!list.length) { mount(listWrap, el('div', { class: 'empty' }, 'No equipment.')); return; }
     mount(listWrap, list.map((e) => el('a', { class: 'list-item', href: `#/taeki/${e.id}` }, [
       el('div', { class: 'grow' }, [
         el('div', { class: 'title' }, [e.brand, e.model].filter(Boolean).join(' ') || 'Sunbed'),
         el('div', { class: 'sub' }, [e.customers?.name, e.locations?.name, e.serial_number && ('S/N ' + e.serial_number)].filter(Boolean).join(' · ')),
       ]),
+      isBulbDue(e, settings) ? el('span', { class: 'badge urgent' }, '💡 Bulbs due') : null,
       el('span', { class: `badge ${e.status === 'in_service' ? 'done' : e.status === 'needs_service' ? 'urgent' : 'cancelled'}` }, EQUIP_STATUS[e.status] || e.status),
     ])));
   }
+  dueOnly.addEventListener('change', draw);
   search.addEventListener('input', draw);
   mount(container, el('div', {}, [
     el('div', { class: 'page-head' }, [
@@ -43,7 +47,10 @@ async function renderList(container) {
       el('span', { class: 'spacer' }),
       btn('+ New equipment', () => equipForm(container, null), { class: 'btn-primary' }),
     ]),
-    el('div', { class: 'row', style: { marginBottom: '12px' } }, search),
+    el('div', { class: 'row', style: { marginBottom: '12px' } }, [
+      search,
+      el('label', { class: 'row', style: { gap: '6px', fontSize: '14px', color: 'var(--muted)' } }, [dueOnly, 'Bulbs due only']),
+    ]),
     listWrap,
   ]));
   draw();
@@ -80,6 +87,7 @@ async function equipForm(container, existing) {
     bulbCount: el('input', { type: 'number', value: existing?.bulb_count ?? '' }),
     facial: el('input', { type: 'number', value: existing?.facial_bulb_count ?? '' }),
     hours: el('input', { type: 'number', step: '0.1', value: existing?.current_bulb_hours ?? '' }),
+    life: el('input', { type: 'number', step: '1', value: existing?.bulb_life_hours ?? '' }),
     notes: el('textarea', {}, existing?.notes || ''),
   };
 
@@ -95,6 +103,7 @@ async function equipForm(container, existing) {
     fieldRow('Body bulbs', f.bulbCount),
     fieldRow('Facial bulbs', f.facial),
     fieldRow('Current bulb hours', f.hours),
+    fieldRow('Bulb life (hrs, blank = default)', f.life),
     fieldRow('Notes', f.notes, true),
   ]);
 
@@ -113,6 +122,7 @@ async function equipForm(container, existing) {
       bulb_count: f.bulbCount.value ? Number(f.bulbCount.value) : null,
       facial_bulb_count: f.facial.value ? Number(f.facial.value) : null,
       current_bulb_hours: f.hours.value ? Number(f.hours.value) : null,
+      bulb_life_hours: f.life.value ? Number(f.life.value) : null,
       notes: f.notes.value.trim() || null,
     };
     const q = existing
@@ -137,9 +147,10 @@ async function equipForm(container, existing) {
 async function renderDetail(container, id) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
-    const [eqRes, bcRes] = await Promise.all([
+    const [eqRes, bcRes, settings] = await Promise.all([
       sb.from('equipment').select('*, customers(id,name), locations(name)').eq('id', id).maybeSingle(),
       sb.from('bulb_changes').select('*, profiles(full_name), products(name)').eq('equipment_id', id).order('changed_at', { ascending: false }),
+      getSettings(),
     ]);
     if (eqRes.error) throw eqRes.error;
     const eq = eqRes.data;
@@ -162,8 +173,8 @@ async function renderDetail(container, id) {
         ['Bulb type', eq.bulb_type],
         ['Body bulbs', eq.bulb_count],
         ['Facial bulbs', eq.facial_bulb_count],
-        ['Current bulb hours', eq.current_bulb_hours],
       ]),
+      bulbMeter(eq, settings),
       eq.notes ? el('p', {}, eq.notes) : null,
     ]);
 
@@ -198,6 +209,23 @@ function infoGrid(pairs) {
       el('div', { class: 'muted', style: { fontSize: '12px' } }, k),
       el('div', {}, String(v)),
     ])));
+}
+
+function bulbMeter(eq, settings) {
+  const life = bulbLife(eq, settings);
+  const pct = bulbPct(eq, settings);
+  const hrs = eq.current_bulb_hours;
+  if (hrs == null && !life) return null;
+  const due = isBulbDue(eq, settings);
+  const cls = pct == null ? '' : due ? 'due' : pct >= 80 ? 'warn' : '';
+  return el('div', { style: { marginTop: '14px' } }, [
+    el('div', { class: 'row', style: { justifyContent: 'space-between', fontSize: '13px' } }, [
+      el('span', { class: 'muted' }, 'Bulb hours'),
+      el('span', due ? { style: { color: 'var(--danger)', fontWeight: '600' } } : { class: 'muted' },
+        `${hrs ?? 0}${life ? ' / ' + life : ''} hrs${due ? ' · replace due' : (pct != null ? ' · ' + pct + '%' : '')}`),
+    ]),
+    pct != null ? el('div', { class: `meter ${cls}` }, el('span', { style: { width: pct + '%' } })) : null,
+  ]);
 }
 
 async function bulbChangeForm(eq, onDone) {

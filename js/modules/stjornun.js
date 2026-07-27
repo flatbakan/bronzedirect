@@ -81,6 +81,8 @@ function companyCard(co, onDone) {
     city: el('input', { value: co.city || '' }),
     phone: el('input', { value: co.phone || '' }),
     email: el('input', { value: co.email || '' }),
+    labor_rate: el('input', { type: 'number', step: '0.01', value: co.labor_rate ?? '' }),
+    default_bulb_life_hours: el('input', { type: 'number', step: '1', value: co.default_bulb_life_hours ?? '' }),
   };
   const save = btn('Save settings', async () => {
     save.disabled = true;
@@ -92,6 +94,8 @@ function companyCard(co, onDone) {
       city: f.city.value.trim() || null,
       phone: f.phone.value.trim() || null,
       email: f.email.value.trim() || null,
+      labor_rate: f.labor_rate.value ? Number(f.labor_rate.value) : null,
+      default_bulb_life_hours: f.default_bulb_life_hours.value ? Number(f.default_bulb_life_hours.value) : null,
       updated_at: new Date().toISOString(),
     }).eq('id', 1);
     save.disabled = false;
@@ -109,6 +113,8 @@ function companyCard(co, onDone) {
       fieldRow('Postcode', f.postal_code),
       fieldRow('Town / city', f.city),
       fieldRow('Email', f.email, true),
+      fieldRow('Labour rate (per hour)', f.labor_rate),
+      fieldRow('Default bulb life (hours)', f.default_bulb_life_hours),
     ]),
     el('div', { class: 'row', style: { marginTop: '12px' } }, save),
   ]);
