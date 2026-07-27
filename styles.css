@@ -122,6 +122,7 @@ button:disabled { opacity: .55; cursor: default; }
 .nav a:hover { background: var(--surface-2); color: var(--text); }
 .nav a.active { background: var(--brand-tint); color: var(--brand-mid); font-weight: 600; }
 .nav a .ico { width: 20px; text-align: center; }
+.nav a .unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-2); margin-left: auto; box-shadow: 0 0 0 3px rgba(178,76,150,.18); }
 .nav .nav-sep { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padding: 14px 12px 6px; }
 .sidebar-foot { padding: 12px; border-top: 1px solid var(--border); }
 

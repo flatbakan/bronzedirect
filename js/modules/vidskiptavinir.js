@@ -2,6 +2,7 @@
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { listCustomers, getCustomer, listLocations } from '../db.js';
+import { isAdmin } from '../auth.js';
 import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
@@ -95,21 +96,31 @@ function customerForm(existing, onDone) {
 async function renderDetail(container, id) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
-    const [customer, locations, equipment, woRes] = await Promise.all([
+    const [customer, locations, equipment, woRes, contactsRes] = await Promise.all([
       getCustomer(id),
       listLocations(id),
       sb.from('equipment').select('*, locations(name)').eq('customer_id', id).order('created_at', { ascending: false }),
       sb.from('work_orders').select('*').eq('customer_id', id).order('created_at', { ascending: false }).limit(20),
+      sb.from('customer_contacts').select('*').eq('customer_id', id).order('is_primary', { ascending: false }).order('name'),
     ]);
     if (!customer) return errorView(container, 'Customer not found.');
     if (equipment.error) throw equipment.error;
+    const contacts = contactsRes.data || [];
 
     const back = el('a', { href: '#/vidskiptavinir', class: 'link-btn' }, '← Customers');
 
     const info = el('div', { class: 'card' }, [
       el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
         el('h2', { style: { margin: 0 } }, customer.name),
-        btn('Edit', () => customerForm(customer, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
+        el('div', { class: 'row' }, [
+          btn('Edit', () => customerForm(customer, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
+          isAdmin() ? btn('Delete', async () => {
+            if (!(await confirmDialog(`Delete ${customer.name}? This also removes their locations, equipment and history. This cannot be undone.`))) return;
+            const { error } = await sb.from('customers').delete().eq('id', id);
+            if (error) { toast(error.message, 'err'); return; }
+            toast('Customer deleted.'); navigate('/vidskiptavinir');
+          }, { class: 'btn-ghost btn-sm' }) : null,
+        ]),
       ]),
       el('div', { class: 'muted', style: { marginTop: '8px' } },
         [customer.kennitala && ('Reg. ' + customer.kennitala), customer.phone, customer.email, customer.contact_name]
@@ -161,11 +172,68 @@ async function renderDetail(container, id) {
         : el('div', { class: 'muted' }, 'No service recorded.'),
     ]);
 
-    mount(container, el('div', {}, [back, info, locSection, equipSection, woSection]));
+    // Contacts
+    const contactsSection = el('div', { class: 'card' }, [
+      headRow('Contacts', () => contactForm(id, null, () => renderDetail(container, id))),
+      contacts.length
+        ? el('div', {}, contacts.map((ct) => el('div', { class: 'list-item' }, [
+            el('div', { class: 'grow' }, [
+              el('div', { class: 'title' }, [ct.name, ct.is_primary ? '★' : ''].filter(Boolean).join(' ')),
+              el('div', { class: 'sub' }, [ct.role, ct.phone, ct.email].filter(Boolean).join(' · ')),
+            ]),
+            btn('Edit', () => contactForm(id, ct, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
+            btn('✕', async () => {
+              if (!(await confirmDialog('Remove contact?'))) return;
+              await sb.from('customer_contacts').delete().eq('id', ct.id);
+              renderDetail(container, id);
+            }, { class: 'btn-ghost btn-sm' }),
+          ])))
+        : el('div', { class: 'muted' }, 'No contacts added.'),
+    ]);
+
+    mount(container, el('div', {}, [back, info, contactsSection, locSection, equipSection, woSection]));
   } catch (e) {
     console.error(e);
     errorView(container, e.message);
   }
+}
+
+function contactForm(customerId, existing, onDone) {
+  const f = {
+    name: el('input', { value: existing?.name || '' }),
+    role: el('input', { value: existing?.role || '' }),
+    phone: el('input', { value: existing?.phone || '' }),
+    email: el('input', { type: 'email', value: existing?.email || '' }),
+    is_primary: el('input', { type: 'checkbox', checked: existing?.is_primary || false }),
+  };
+  const body = el('div', { class: 'form-grid' }, [
+    fieldRow('Name *', f.name, true),
+    fieldRow('Role (e.g. Owner, Manager)', f.role),
+    fieldRow('Phone', f.phone),
+    fieldRow('Email', f.email),
+    el('div', { class: 'field full' }, [el('label', {}, 'Primary contact'), el('div', { class: 'row' }, [f.is_primary, el('span', { class: 'muted' }, 'Show first')])]),
+  ]);
+  modal({
+    title: existing ? 'Edit contact' : 'New contact',
+    body,
+    onSave: async () => {
+      const payload = {
+        customer_id: customerId,
+        name: f.name.value.trim(),
+        role: f.role.value.trim() || null,
+        phone: f.phone.value.trim() || null,
+        email: f.email.value.trim() || null,
+        is_primary: f.is_primary.checked,
+      };
+      if (!payload.name) { toast('Name is required.', 'err'); return false; }
+      const q = existing
+        ? sb.from('customer_contacts').update(payload).eq('id', existing.id)
+        : sb.from('customer_contacts').insert(payload);
+      const { error } = await q;
+      if (error) { toast(error.message, 'err'); return false; }
+      toast('Saved.'); onDone && onDone();
+    },
+  });
 }
 
 function headRow(title, onAdd) {

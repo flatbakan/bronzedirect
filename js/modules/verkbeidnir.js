@@ -27,6 +27,8 @@ async function renderList(container) {
     ...Object.entries(WO_STATUS).map(([v, l]) => el('option', { value: v }, l)),
   ]);
   const search = el('input', { type: 'search', placeholder: 'Search…', style: { maxWidth: '240px' } });
+  const techSel = el('select', { style: { maxWidth: '190px' } }, [el('option', { value: '' }, 'All technicians')]);
+  listStaff().then((staff) => staff.forEach((s) => techSel.append(el('option', { value: s.id }, s.full_name || s.email)))).catch(() => {});
   const listWrap = el('div', {});
   let rows = []; // last fetched data (for client-side search)
 
@@ -44,8 +46,10 @@ async function renderList(container) {
   }
   function draw() {
     const t = search.value.trim().toLowerCase();
-    const list = rows.filter((w) => !t ||
-      [`#${w.number}`, w.title, w.customers?.name].some((x) => (x || '').toLowerCase().includes(t)));
+    const tech = techSel.value;
+    const list = rows.filter((w) =>
+      (!tech || w.assigned_to === tech) &&
+      (!t || [`#${w.number}`, w.title, w.customers?.name].some((x) => (x || '').toLowerCase().includes(t))));
     if (!list.length) { mount(listWrap, el('div', { class: 'empty' }, 'No jobs.')); return; }
     mount(listWrap, list.map((w) => el('a', { class: 'list-item', href: `#/verkbeidnir/${w.id}` }, [
       el('div', { class: 'grow' }, [
@@ -63,6 +67,7 @@ async function renderList(container) {
     ])));
   }
   statusSel.addEventListener('change', load);
+  techSel.addEventListener('change', draw);
   search.addEventListener('input', draw);
 
   mount(container, el('div', {}, [
@@ -71,7 +76,7 @@ async function renderList(container) {
       el('span', { class: 'spacer' }),
       btn('+ New work order', () => woForm(container), { class: 'btn-primary' }),
     ]),
-    el('div', { class: 'row', style: { marginBottom: '12px' } }, [statusSel, search]),
+    el('div', { class: 'row', style: { marginBottom: '12px' } }, [statusSel, techSel, search]),
     listWrap,
   ]));
   await load();
@@ -158,10 +163,11 @@ async function woForm(container) {
 async function renderDetail(container, id) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
-    const [woRes, partsRes, photosRes, staff] = await Promise.all([
+    const [woRes, partsRes, photosRes, commentsRes, staff] = await Promise.all([
       sb.from('work_orders').select('*, customers(id,name,kennitala), locations(name,address,access_notes), equipment(id,brand,model,serial_number), profiles:assigned_to(full_name)').eq('id', id).maybeSingle(),
       sb.from('work_order_parts').select('*, products(name)').eq('work_order_id', id).order('created_at'),
       sb.from('work_order_photos').select('*').eq('work_order_id', id).order('uploaded_at'),
+      sb.from('work_order_comments').select('*, profiles:author_id(full_name)').eq('work_order_id', id).order('created_at'),
       listStaff(),
     ]);
     if (woRes.error) throw woRes.error;
@@ -169,6 +175,7 @@ async function renderDetail(container, id) {
     if (!wo) return errorView(container, 'Work order not found.');
     const parts = partsRes.data || [];
     const photos = photosRes.data || [];
+    const comments = commentsRes.data || [];
     const reload = () => renderDetail(container, id);
 
     // --- Header ---
@@ -199,7 +206,14 @@ async function renderDetail(container, id) {
       wo.resolution ? el('p', {}, [el('span', { class: 'muted' }, 'Resolution: '), wo.resolution]) : null,
       el('div', { class: 'row', style: { marginTop: '8px' } }, [
         btn('Edit', () => editWo(wo, staff, reload), { class: 'btn-ghost btn-sm' }),
+        btn('🖨️ Print job sheet', () => printJobSheet(wo, parts), { class: 'btn-ghost btn-sm' }),
         wo.signature_path ? btn('View signature', async () => openStored(wo.signature_path), { class: 'btn-ghost btn-sm' }) : null,
+        isAdmin() ? btn('Delete', async () => {
+          if (!(await confirmDialog(`Delete job #${wo.number}? This cannot be undone.`))) return;
+          const { error } = await sb.from('work_orders').delete().eq('id', wo.id);
+          if (error) { toast(error.message, 'err'); return; }
+          toast('Work order deleted.'); navigate('/verkbeidnir');
+        }, { class: 'btn-ghost btn-sm' }) : null,
       ]),
     ]);
 
@@ -259,14 +273,80 @@ async function renderDetail(container, id) {
         ])
       : null;
 
+    const commentsSection = buildComments(wo.id, comments, reload);
+
     mount(container, el('div', {}, [
       el('a', { href: '#/verkbeidnir', class: 'link-btn' }, '← Work orders'),
-      header, flow, partsSection, photoSection, completeSection, invoiceSection,
+      header, flow, partsSection, photoSection, commentsSection, completeSection, invoiceSection,
     ]));
   } catch (e) {
     console.error(e);
     errorView(container, e.message);
   }
+}
+
+// ---- Comments thread ----
+function buildComments(woId, comments, reload) {
+  const input = el('textarea', { placeholder: 'Write a comment…', style: { minHeight: '60px' } });
+  const post = btn('Post', async () => {
+    const body = input.value.trim();
+    if (!body) return;
+    post.disabled = true;
+    const me = getProfile();
+    const { error } = await sb.from('work_order_comments').insert({ work_order_id: woId, author_id: me?.id || null, body });
+    post.disabled = false;
+    if (error) { toast(error.message, 'err'); return; }
+    input.value = ''; reload();
+  }, { class: 'btn-primary btn-sm' });
+
+  return el('div', { class: 'card' }, [
+    el('h3', { style: { marginTop: 0 } }, `Comments${comments.length ? ` (${comments.length})` : ''}`),
+    comments.length ? el('div', { style: { marginBottom: '12px' } }, comments.map((c) => el('div', {
+      style: { padding: '10px 12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', marginBottom: '8px' },
+    }, [
+      el('div', { style: { whiteSpace: 'pre-wrap' } }, c.body),
+      el('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
+        [c.profiles?.full_name || 'Unknown', fmtDateTime(c.created_at)].join(' · ')),
+    ]))) : el('div', { class: 'muted', style: { marginBottom: '12px' } }, 'No comments yet.'),
+    input,
+    el('div', { class: 'row', style: { justifyContent: 'flex-end', marginTop: '8px' } }, post),
+  ]);
+}
+
+// ---- Printable job sheet ----
+function printJobSheet(wo, parts) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const rows = parts.map((p) => `<tr><td>${esc(p.description || p.products?.name || 'Item')}</td><td style="text-align:right">${p.quantity}</td><td style="text-align:right">${money(p.unit_price || 0)}</td><td style="text-align:right">${money((p.quantity || 0) * (p.unit_price || 0))}</td></tr>`).join('');
+  const total = parts.reduce((s, p) => s + (Number(p.quantity) || 0) * (Number(p.unit_price) || 0), 0);
+  const line = (label, val) => val ? `<div style="margin:4px 0"><strong>${esc(label)}:</strong> ${esc(val)}</div>` : '';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Job #${wo.number}</title>
+    <style>body{font-family:Segoe UI,system-ui,Arial,sans-serif;color:#1b1520;padding:32px;max-width:800px;margin:0 auto}
+    h1{font-size:22px;margin:0 0 4px} .brand{background:linear-gradient(135deg,#531E52,#b24c96);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:700;font-size:20px}
+    table{width:100%;border-collapse:collapse;margin-top:12px} td,th{border-bottom:1px solid #e4dfea;padding:8px;text-align:left}
+    .muted{color:#6d6579;font-size:13px} .sig{margin-top:40px;border-top:1px solid #ccc;padding-top:6px;width:260px}</style></head>
+    <body>
+    <div class="brand">BRONZE DIRECT</div>
+    <h1>Job sheet #${wo.number}</h1>
+    <div class="muted">${esc(WO_TYPE[wo.type] || wo.type)} · ${esc(WO_STATUS[wo.status] || wo.status)}</div>
+    <hr style="border:none;border-top:1px solid #e4dfea;margin:16px 0">
+    ${line('Customer', wo.customers?.name)}
+    ${line('Location', wo.locations?.name || wo.locations?.address)}
+    ${line('Equipment', wo.equipment && [wo.equipment.brand, wo.equipment.model].filter(Boolean).join(' '))}
+    ${line('Scheduled', fmtDateTime(wo.scheduled_at))}
+    ${line('Assigned to', wo.profiles?.full_name)}
+    ${line('Title', wo.title)}
+    ${wo.description ? `<div style="margin:8px 0"><strong>Description:</strong><br>${esc(wo.description)}</div>` : ''}
+    ${wo.resolution ? `<div style="margin:8px 0"><strong>Resolution:</strong><br>${esc(wo.resolution)}</div>` : ''}
+    ${parts.length ? `<table><thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows}<tr><td colspan="3" style="text-align:right"><strong>Total</strong></td><td style="text-align:right"><strong>${money(total)}</strong></td></tr></tbody></table>` : ''}
+    ${line('Labour hours', wo.labor_hours)}
+    <div class="sig">Signature${wo.signed_name ? ': ' + esc(wo.signed_name) : ''}</div>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to print.', 'err'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
 }
 
 // ---- Status buttons ----

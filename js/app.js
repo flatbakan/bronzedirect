@@ -1,6 +1,7 @@
 // app.js — Boot, auth gate, shell and navigation.
 import { el, mount, clear, btn } from './render.js';
 import { APP_NAME } from './config.js';
+import { sb } from './supabase.js';
 import * as auth from './auth.js';
 import { route, setNotFound, startRouter, navigate, currentPath } from './router.js';
 import { toast } from './ui.js';
@@ -18,23 +19,27 @@ function logo(height) {
 
 // -------- Navigation --------
 const NAV = [
-  { path: '/idag',          label: 'Today',      ico: '📅' },
-  { path: '/verkbeidnir',   label: 'Work orders',ico: '🧰' },
-  { path: '/vidskiptavinir',label: 'Customers',  ico: '🏢' },
-  { path: '/taeki',         label: 'Equipment',  ico: '🛏️' },
+  { path: '/idag',          label: 'Today',        ico: '📅' },
+  { path: '/dagatal',       label: 'Schedule',     ico: '🗓️' },
+  { path: '/verkbeidnir',   label: 'Work orders',  ico: '🧰' },
+  { path: '/vidskiptavinir',label: 'Customers',    ico: '🏢' },
+  { path: '/taeki',         label: 'Equipment',    ico: '🛏️' },
+  { path: '/tilkynningar',  label: 'Announcements',ico: '📢' },
   { sep: 'Office' },
-  { path: '/vorur',         label: 'Products',   ico: '📦' },
-  { path: '/reikningar',    label: 'Invoices',   ico: '🧾', roles: ['admin','office'] },
+  { path: '/vorur',         label: 'Products',     ico: '📦' },
+  { path: '/reikningar',    label: 'Invoices',     ico: '🧾', roles: ['admin','office'] },
   { sep: 'Admin', roles: ['admin'] },
-  { path: '/stjornun',      label: 'Admin',      ico: '⚙️', roles: ['admin'] },
+  { path: '/stjornun',      label: 'Admin',        ico: '⚙️', roles: ['admin'] },
 ];
 
 // Module files (lazy import). Contract: render(container, param).
 const MODULES = {
   '/idag':           () => import('./modules/idag.js'),
+  '/dagatal':        () => import('./modules/dagatal.js'),
   '/verkbeidnir':    () => import('./modules/verkbeidnir.js'),
   '/vidskiptavinir': () => import('./modules/vidskiptavinir.js'),
   '/taeki':          () => import('./modules/taeki.js'),
+  '/tilkynningar':   () => import('./modules/tilkynningar.js'),
   '/vorur':          () => import('./modules/vorur.js'),
   '/reikningar':     () => import('./modules/reikningar.js'),
   '/stjornun':       () => import('./modules/stjornun.js'),
@@ -170,6 +175,26 @@ function setActiveNav(path) {
   });
 }
 
+// Unread-announcements dot on the nav link
+async function refreshAnnouncementBadge() {
+  const me = auth.getProfile();
+  if (!me || !sidebarEl) return;
+  const link = sidebarEl.querySelector('.nav a[data-path="/tilkynningar"]');
+  if (!link) return;
+  try {
+    const [{ data: anns }, { data: reads }] = await Promise.all([
+      sb.from('announcements').select('id'),
+      sb.from('announcement_reads').select('announcement_id').eq('profile_id', me.id),
+    ]);
+    const readSet = new Set((reads || []).map((r) => r.announcement_id));
+    const unread = (anns || []).filter((a) => !readSet.has(a.id)).length;
+    let dot = link.querySelector('.unread-dot');
+    if (unread > 0 && !dot) link.append(el('span', { class: 'unread-dot' }));
+    else if (unread === 0 && dot) dot.remove();
+  } catch { /* table may not exist yet */ }
+}
+window.addEventListener('bd:announcements-read', refreshAnnouncementBadge);
+
 // -------- Routing --------
 function registerRoutes() {
   for (const [path, loader] of Object.entries(MODULES)) {
@@ -214,6 +239,7 @@ async function boot() {
   renderShell();
   registerRoutes();
   startRouter(); // reads current hash; empty/ / falls back to /idag
+  refreshAnnouncementBadge();
 }
 
 // React to sign-out in another tab
