@@ -8,3 +8,8 @@ export const SUPABASE_ANON_KEY = 'sb_publishable_ZY-oN-vqz-G0qcgwfQ12Zw_d9gWSLvx
 export const STORAGE_BUCKET = 'bronze';
 
 export const APP_NAME = 'Bronze Direct';
+
+// Region / money
+export const LOCALE = 'en-GB';
+export const CURRENCY = 'GBP';
+export const VAT_RATE = 20;

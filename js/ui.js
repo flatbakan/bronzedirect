@@ -18,7 +18,7 @@ export function toast(message, kind = 'ok') {
 
 // ---- Modal ----
 // opts: { title, body(node), onSave?(), saveLabel?, wide? }
-export function modal({ title, body, onSave, saveLabel = 'Vista', hideSave = false }) {
+export function modal({ title, body, onSave, saveLabel = 'Save', hideSave = false }) {
   const scrim = el('div', { class: 'modal-scrim' });
   const close = () => scrim.remove();
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
@@ -31,7 +31,7 @@ export function modal({ title, body, onSave, saveLabel = 'Vista', hideSave = fal
   }, { class: 'btn-primary' });
 
   const foot = el('div', { class: 'modal-foot' }, [
-    btn('Hætta við', close, { class: 'btn-ghost' }),
+    btn('Cancel', close, { class: 'btn-ghost' }),
     hideSave ? null : saveBtn,
   ]);
 
@@ -45,14 +45,14 @@ export function modal({ title, body, onSave, saveLabel = 'Vista', hideSave = fal
   return { close };
 }
 
-export function confirmDialog(message, { danger = true, confirmLabel = 'Staðfesta' } = {}) {
+export function confirmDialog(message, { danger = true, confirmLabel = 'Confirm' } = {}) {
   return new Promise((resolve) => {
     const scrim = el('div', { class: 'modal-scrim' });
     const done = (v) => { scrim.remove(); resolve(v); };
     scrim.append(el('div', { class: 'modal' }, [
       el('div', { class: 'modal-body' }, el('p', {}, message)),
       el('div', { class: 'modal-foot' }, [
-        btn('Hætta við', () => done(false), { class: 'btn-ghost' }),
+        btn('Cancel', () => done(false), { class: 'btn-ghost' }),
         btn(confirmLabel, () => done(true), { class: danger ? 'btn-danger' : 'btn-primary' }),
       ]),
     ]));
@@ -68,13 +68,13 @@ export function fieldRow(label, inputEl, full = false) {
   ]);
 }
 
-export function spinnerView(container, message = 'Hleð…') {
+export function spinnerView(container, message = 'Loading…') {
   mount(container, el('div', { class: 'empty' }, message));
 }
 
 export function errorView(container, message) {
   mount(container, el('div', { class: 'empty' }, [
-    el('p', {}, 'Villa kom upp'),
+    el('p', {}, 'Something went wrong'),
     el('p', { class: 'muted' }, message || ''),
   ]));
 }

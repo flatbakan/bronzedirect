@@ -1,4 +1,4 @@
-// app.js — Ræsir, auðkenningarhlið, skel og leiðsögn.
+// app.js — Boot, auth gate, shell and navigation.
 import { el, mount, clear, btn } from './render.js';
 import { APP_NAME } from './config.js';
 import * as auth from './auth.js';
@@ -7,20 +7,29 @@ import { toast } from './ui.js';
 
 const appRoot = document.getElementById('app');
 
-// -------- Leiðsögn (nav) --------
+// Brand logo (wordmark SVG at repo root). Falls back to text if it fails to load.
+function logo(height) {
+  const img = el('img', { src: 'logobd.svg', alt: APP_NAME });
+  if (height) img.style.height = height;
+  const wrap = el('div', { class: 'brand' }, img);
+  img.addEventListener('error', () => mount(wrap, el('span', { class: 'fallback' }, APP_NAME)));
+  return wrap;
+}
+
+// -------- Navigation --------
 const NAV = [
-  { path: '/idag',          label: 'Í dag',          ico: '📅' },
-  { path: '/verkbeidnir',   label: 'Verkbeiðnir',    ico: '🧰' },
-  { path: '/vidskiptavinir',label: 'Viðskiptavinir', ico: '🏢' },
-  { path: '/taeki',         label: 'Tæki',           ico: '🛏️' },
-  { sep: 'Skrifstofa' },
-  { path: '/vorur',         label: 'Vörur',          ico: '📦' },
-  { path: '/reikningar',    label: 'Reikningar',     ico: '🧾', roles: ['admin','office'] },
-  { sep: 'Stjórnun', roles: ['admin'] },
-  { path: '/stjornun',      label: 'Stjórnun',       ico: '⚙️', roles: ['admin'] },
+  { path: '/idag',          label: 'Today',      ico: '📅' },
+  { path: '/verkbeidnir',   label: 'Work orders',ico: '🧰' },
+  { path: '/vidskiptavinir',label: 'Customers',  ico: '🏢' },
+  { path: '/taeki',         label: 'Equipment',  ico: '🛏️' },
+  { sep: 'Office' },
+  { path: '/vorur',         label: 'Products',   ico: '📦' },
+  { path: '/reikningar',    label: 'Invoices',   ico: '🧾', roles: ['admin','office'] },
+  { sep: 'Admin', roles: ['admin'] },
+  { path: '/stjornun',      label: 'Admin',      ico: '⚙️', roles: ['admin'] },
 ];
 
-// Module-skrár (lazy import). render(container, param) er samningurinn.
+// Module files (lazy import). Contract: render(container, param).
 const MODULES = {
   '/idag':           () => import('./modules/idag.js'),
   '/verkbeidnir':    () => import('./modules/verkbeidnir.js'),
@@ -39,15 +48,15 @@ function canSee(item) {
   return auth.isAdmin() || item.roles.includes(r);
 }
 
-// -------- Innskráningarskjár --------
+// -------- Login screen --------
 function renderAuth() {
-  const email = el('input', { type: 'email', autocomplete: 'email', placeholder: 'nafn@bronsdirect.is' });
+  const email = el('input', { type: 'email', autocomplete: 'email', placeholder: 'name@bronzedirect.com' });
   const pass = el('input', { type: 'password', autocomplete: 'current-password', placeholder: '••••••••' });
   const msg = el('div');
   let mode = 'in'; // 'in' | 'up' | 'forgot'
-  const nameInput = el('input', { type: 'text', placeholder: 'Fullt nafn' });
+  const nameInput = el('input', { type: 'text', placeholder: 'Full name' });
 
-  const submit = btn('Skrá inn', async () => {
+  const submit = btn('Sign in', async () => {
     msg.replaceChildren();
     submit.disabled = true;
     try {
@@ -56,15 +65,15 @@ function renderAuth() {
         await boot();
       } else if (mode === 'up') {
         await auth.signUp(email.value, pass.value, nameInput.value);
-        setMsg('Aðgangur stofnaður. Þú getur nú skráð þig inn.', 'ok');
+        setMsg('Account created. You can now sign in.', 'ok');
         setMode('in');
       } else {
         await auth.resetPassword(email.value);
-        setMsg('Ef netfangið er til fær það endurstillingarpóst.', 'ok');
+        setMsg('If the email exists, a reset link has been sent.', 'ok');
         setMode('in');
       }
     } catch (e) {
-      setMsg(þýðaVillu(e), 'err');
+      setMsg(translateError(e), 'err');
     } finally {
       submit.disabled = false;
     }
@@ -72,26 +81,26 @@ function renderAuth() {
 
   function setMsg(t, kind) { mount(msg, el('div', { class: `msg ${kind}` }, t)); }
 
-  const nameField = el('div', { class: 'field' }, [el('label', {}, 'Nafn'), nameInput]);
-  const passField = el('div', { class: 'field' }, [el('label', {}, 'Lykilorð'), pass]);
+  const nameField = el('div', { class: 'field' }, [el('label', {}, 'Name'), nameInput]);
+  const passField = el('div', { class: 'field' }, [el('label', {}, 'Password'), pass]);
   const switchRow = el('div', { class: 'row', style: { justifyContent: 'space-between', marginTop: '8px' } });
 
   function setMode(m) {
     mode = m;
     nameField.style.display = m === 'up' ? '' : 'none';
     passField.style.display = m === 'forgot' ? 'none' : '';
-    submit.textContent = m === 'in' ? 'Skrá inn' : m === 'up' ? 'Stofna aðgang' : 'Senda endurstillingu';
+    submit.textContent = m === 'in' ? 'Sign in' : m === 'up' ? 'Create account' : 'Send reset link';
     mount(switchRow, [
-      btn(m === 'in' ? 'Nýr aðgangur' : 'Innskráning', () => setMode(m === 'in' ? 'up' : 'in'), { class: 'link-btn' }),
-      m === 'in' ? btn('Gleymt lykilorð?', () => setMode('forgot'), { class: 'link-btn' }) : null,
+      btn(m === 'in' ? 'Create account' : 'Sign in', () => setMode(m === 'in' ? 'up' : 'in'), { class: 'link-btn' }),
+      m === 'in' ? btn('Forgot password?', () => setMode('forgot'), { class: 'link-btn' }) : null,
     ]);
     msg.replaceChildren();
   }
 
   const card = el('div', { class: 'auth-card' }, [
-    el('div', { class: 'brand' }, [el('span', { class: 'dot' }), APP_NAME]),
-    el('div', { class: 'auth-sub' }, 'Innra þjónustu- og heildsölukerfi'),
-    el('div', { class: 'field' }, [el('label', {}, 'Netfang'), email]),
+    logo('26px'),
+    el('div', { class: 'auth-sub' }, 'Internal service & wholesale system'),
+    el('div', { class: 'field' }, [el('label', {}, 'Email'), email]),
     nameField,
     passField,
     submit,
@@ -105,16 +114,16 @@ function renderAuth() {
   email.focus();
 }
 
-function þýðaVillu(e) {
+function translateError(e) {
   const m = (e && e.message) || String(e);
-  if (/Invalid login credentials/i.test(m)) return 'Rangt netfang eða lykilorð.';
-  if (/Email not confirmed/i.test(m)) return 'Netfang er óstaðfest.';
-  if (/already registered/i.test(m)) return 'Netfang er þegar skráð.';
-  if (/at least 6/i.test(m)) return 'Lykilorð verður að vera a.m.k. 6 stafir.';
+  if (/Invalid login credentials/i.test(m)) return 'Wrong email or password.';
+  if (/Email not confirmed/i.test(m)) return 'Email is not confirmed.';
+  if (/already registered/i.test(m)) return 'Email is already registered.';
+  if (/at least 6/i.test(m)) return 'Password must be at least 6 characters.';
   return m;
 }
 
-// -------- App-skel --------
+// -------- App shell --------
 function renderShell() {
   const profile = auth.getProfile();
 
@@ -126,12 +135,12 @@ function renderShell() {
   });
 
   sidebarEl = el('aside', { class: 'sidebar' }, [
-    el('div', { class: 'sidebar-head' }, el('div', { class: 'brand' }, [el('span', { class: 'dot' }), APP_NAME])),
+    el('div', { class: 'sidebar-head' }, logo()),
     el('nav', { class: 'nav' }, navLinks),
     el('div', { class: 'sidebar-foot' }, [
       el('div', { class: 'muted', style: { fontSize: '13px', marginBottom: '8px' } },
         (profile?.full_name || profile?.email || '') + (auth.isAdmin() ? ' · admin' : '')),
-      btn('Skrá út', async () => { await auth.signOut(); boot(); }, { class: 'btn-ghost btn-block btn-sm' }),
+      btn('Sign out', async () => { await auth.signOut(); boot(); }, { class: 'btn-ghost btn-block btn-sm' }),
     ]),
   ]);
 
@@ -161,7 +170,7 @@ function setActiveNav(path) {
   });
 }
 
-// -------- Route-meðhöndlun --------
+// -------- Routing --------
 function registerRoutes() {
   for (const [path, loader] of Object.entries(MODULES)) {
     route(path, async (param) => {
@@ -170,45 +179,44 @@ function registerRoutes() {
       closeSidebar();
       setActiveNav(path);
       titleEl.textContent = item?.label || APP_NAME;
-      mount(viewEl, el('div', { class: 'empty' }, 'Hleð…'));
+      mount(viewEl, el('div', { class: 'empty' }, 'Loading…'));
       try {
         const mod = await loader();
         await mod.render(viewEl, param);
       } catch (e) {
         console.error(e);
-        mount(viewEl, el('div', { class: 'empty' }, 'Villa við að hlaða einingu: ' + (e.message || e)));
+        mount(viewEl, el('div', { class: 'empty' }, 'Failed to load module: ' + (e.message || e)));
       }
     });
   }
   setNotFound(() => navigate('/idag'));
 }
 
-// -------- Ræsing --------
+// -------- Boot --------
 async function boot() {
   appRoot.setAttribute('aria-busy', 'true');
-  mount(appRoot, el('div', { class: 'boot' }, 'Hleð…'));
+  mount(appRoot, el('div', { class: 'boot' }, 'Loading…'));
   const session = await auth.getSession();
   if (!session) { renderAuth(); return; }
   const profile = await auth.loadProfile();
   if (!profile) {
-    // Innskráður en enginn profil / óvirkur
     renderAuth();
-    toast('Aðgangur fannst ekki eða er óvirkur. Hafðu samband við stjórnanda.', 'err');
+    toast('Account not found or inactive. Contact an administrator.', 'err');
     await auth.signOut();
     return;
   }
   if (profile.is_active === false) {
     await auth.signOut();
     renderAuth();
-    toast('Aðgangur er óvirkur.', 'err');
+    toast('Account is inactive.', 'err');
     return;
   }
   renderShell();
   registerRoutes();
-  startRouter(); // les núverandi hash; tómt/ / fer sjálfkrafa á /idag gegnum notFound
+  startRouter(); // reads current hash; empty/ / falls back to /idag
 }
 
-// Bregst við útskráningu í öðrum flipa
+// React to sign-out in another tab
 auth.onAuthChange((session) => {
   if (!session && !document.querySelector('.auth-wrap')) boot();
 });

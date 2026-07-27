@@ -1,4 +1,4 @@
-// modules/vidskiptavinir.js — Viðskiptavinir: listi + spjaldskrá.
+// modules/vidskiptavinir.js — Customers: list + profile.
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { listCustomers, getCustomer, listLocations } from '../db.js';
@@ -12,36 +12,36 @@ export async function render(container, param) {
   return renderList(container);
 }
 
-// ---------------- Listi ----------------
+// ---------------- List ----------------
 async function renderList(container) {
-  mount(container, el('div', { class: 'empty' }, 'Hleð…'));
+  mount(container, el('div', { class: 'empty' }, 'Loading…'));
   let customers;
   try { customers = await listCustomers(); }
   catch (e) { return errorView(container, e.message); }
 
-  const search = el('input', { type: 'search', placeholder: 'Leita…', style: { maxWidth: '260px' } });
+  const search = el('input', { type: 'search', placeholder: 'Search…', style: { maxWidth: '260px' } });
   const listWrap = el('div', {});
 
   function draw() {
     const term = search.value.trim().toLowerCase();
     const rows = customers.filter((c) =>
       !term || (c.name || '').toLowerCase().includes(term) || (c.kennitala || '').includes(term));
-    if (!rows.length) { mount(listWrap, el('div', { class: 'empty' }, 'Enginn viðskiptavinur.')); return; }
+    if (!rows.length) { mount(listWrap, el('div', { class: 'empty' }, 'No customers.')); return; }
     mount(listWrap, rows.map((c) => el('a', { class: 'list-item', href: `#/vidskiptavinir/${c.id}` }, [
       el('div', { class: 'grow' }, [
         el('div', { class: 'title' }, c.name),
         el('div', { class: 'sub' }, [c.kennitala, c.phone, c.contact_name].filter(Boolean).join(' · ')),
       ]),
-      c.is_active ? null : el('span', { class: 'badge cancelled' }, 'Óvirkur'),
+      c.is_active ? null : el('span', { class: 'badge cancelled' }, 'Inactive'),
     ])));
   }
   search.addEventListener('input', draw);
 
   mount(container, el('div', {}, [
     el('div', { class: 'page-head' }, [
-      el('h2', {}, 'Viðskiptavinir'),
+      el('h2', {}, 'Customers'),
       el('span', { class: 'spacer' }),
-      btn('+ Nýr', () => customerForm(null, () => renderList(container)), { class: 'btn-primary' }),
+      btn('+ New', () => customerForm(null, () => renderList(container)), { class: 'btn-primary' }),
     ]),
     el('div', { class: 'row', style: { marginBottom: '12px' } }, search),
     listWrap,
@@ -49,7 +49,7 @@ async function renderList(container) {
   draw();
 }
 
-// ---------------- Form (nýr/breyta) ----------------
+// ---------------- Form (new/edit) ----------------
 function customerForm(existing, onDone) {
   const f = {
     name: el('input', { value: existing?.name || '' }),
@@ -60,15 +60,15 @@ function customerForm(existing, onDone) {
     notes: el('textarea', {}, existing?.notes || ''),
   };
   const body = el('div', { class: 'form-grid' }, [
-    fieldRow('Nafn *', f.name, true),
-    fieldRow('Kennitala', f.kennitala),
-    fieldRow('Sími', f.phone),
-    fieldRow('Netfang', f.email),
-    fieldRow('Tengiliður', f.contact_name),
-    fieldRow('Athugasemdir', f.notes, true),
+    fieldRow('Name *', f.name, true),
+    fieldRow('Company reg. no.', f.kennitala),
+    fieldRow('Phone', f.phone),
+    fieldRow('Email', f.email),
+    fieldRow('Contact person', f.contact_name),
+    fieldRow('Notes', f.notes, true),
   ]);
   modal({
-    title: existing ? 'Breyta viðskiptavini' : 'Nýr viðskiptavinur',
+    title: existing ? 'Edit customer' : 'New customer',
     body,
     onSave: async () => {
       const payload = {
@@ -79,21 +79,21 @@ function customerForm(existing, onDone) {
         contact_name: f.contact_name.value.trim() || null,
         notes: f.notes.value.trim() || null,
       };
-      if (!payload.name) { toast('Nafn vantar.', 'err'); return false; }
+      if (!payload.name) { toast('Name is required.', 'err'); return false; }
       const q = existing
         ? sb.from('customers').update(payload).eq('id', existing.id)
         : sb.from('customers').insert(payload);
       const { error } = await q;
       if (error) { toast(error.message, 'err'); return false; }
-      toast('Vistað.');
+      toast('Saved.');
       onDone && onDone();
     },
   });
 }
 
-// ---------------- Spjaldskrá ----------------
+// ---------------- Profile ----------------
 async function renderDetail(container, id) {
-  mount(container, el('div', { class: 'empty' }, 'Hleð…'));
+  mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
     const [customer, locations, equipment, woRes] = await Promise.all([
       getCustomer(id),
@@ -101,55 +101,55 @@ async function renderDetail(container, id) {
       sb.from('equipment').select('*, locations(name)').eq('customer_id', id).order('created_at', { ascending: false }),
       sb.from('work_orders').select('*').eq('customer_id', id).order('created_at', { ascending: false }).limit(20),
     ]);
-    if (!customer) return errorView(container, 'Viðskiptavinur fannst ekki.');
+    if (!customer) return errorView(container, 'Customer not found.');
     if (equipment.error) throw equipment.error;
 
-    const back = el('a', { href: '#/vidskiptavinir', class: 'link-btn' }, '← Viðskiptavinir');
+    const back = el('a', { href: '#/vidskiptavinir', class: 'link-btn' }, '← Customers');
 
     const info = el('div', { class: 'card' }, [
       el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
         el('h2', { style: { margin: 0 } }, customer.name),
-        btn('Breyta', () => customerForm(customer, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
+        btn('Edit', () => customerForm(customer, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
       ]),
       el('div', { class: 'muted', style: { marginTop: '8px' } },
-        [customer.kennitala && ('kt. ' + customer.kennitala), customer.phone, customer.email, customer.contact_name]
+        [customer.kennitala && ('Reg. ' + customer.kennitala), customer.phone, customer.email, customer.contact_name]
           .filter(Boolean).join(' · ')),
       customer.notes ? el('p', {}, customer.notes) : null,
     ]);
 
-    // Starfsstöðvar
+    // Locations
     const locSection = el('div', { class: 'card' }, [
-      headRow('Starfsstöðvar', () => locationForm(id, null, () => renderDetail(container, id))),
+      headRow('Locations', () => locationForm(id, null, () => renderDetail(container, id))),
       locations.length
         ? el('div', {}, locations.map((l) => el('div', { class: 'list-item' }, [
             el('div', { class: 'grow' }, [
-              el('div', { class: 'title' }, l.name || l.address || 'Starfsstöð'),
+              el('div', { class: 'title' }, l.name || l.address || 'Location'),
               el('div', { class: 'sub' }, [l.address, l.city, l.access_notes].filter(Boolean).join(' · ')),
             ]),
-            btn('Breyta', () => locationForm(id, l, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
+            btn('Edit', () => locationForm(id, l, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
           ])))
-        : el('div', { class: 'muted' }, 'Engin starfsstöð skráð.'),
+        : el('div', { class: 'muted' }, 'No locations added.'),
     ]);
 
-    // Tæki
+    // Equipment
     const equipList = equipment.data || [];
     const equipSection = el('div', { class: 'card' }, [
-      headRow('Tæki', () => { prefill.set({ customerId: id }); navigate('/taeki/new'); }),
+      headRow('Equipment', () => { prefill.set({ customerId: id }); navigate('/taeki/new'); }),
       equipList.length
         ? el('div', {}, equipList.map((e) => el('a', { class: 'list-item', href: `#/taeki/${e.id}` }, [
             el('div', { class: 'grow' }, [
-              el('div', { class: 'title' }, [e.brand, e.model].filter(Boolean).join(' ') || 'Bekkur'),
-              el('div', { class: 'sub' }, [e.serial_number && ('nr. ' + e.serial_number), e.locations?.name].filter(Boolean).join(' · ')),
+              el('div', { class: 'title' }, [e.brand, e.model].filter(Boolean).join(' ') || 'Sunbed'),
+              el('div', { class: 'sub' }, [e.serial_number && ('S/N ' + e.serial_number), e.locations?.name].filter(Boolean).join(' · ')),
             ]),
             el('span', { class: `badge ${e.status === 'in_service' ? 'done' : e.status === 'needs_service' ? 'urgent' : 'cancelled'}` }, EQUIP_STATUS[e.status] || e.status),
           ])))
-        : el('div', { class: 'muted' }, 'Engin tæki skráð.'),
+        : el('div', { class: 'muted' }, 'No equipment added.'),
     ]);
 
-    // Þjónustusaga
+    // Service history
     const wos = woRes.data || [];
     const woSection = el('div', { class: 'card' }, [
-      headRow('Þjónustusaga', () => { prefill.set({ customerId: id }); navigate('/verkbeidnir/new'); }),
+      headRow('Service history', () => { prefill.set({ customerId: id }); navigate('/verkbeidnir/new'); }),
       wos.length
         ? el('div', {}, wos.map((w) => el('a', { class: 'list-item', href: `#/verkbeidnir/${w.id}` }, [
             el('div', { class: 'grow' }, [
@@ -158,7 +158,7 @@ async function renderDetail(container, id) {
             ]),
             el('span', { class: `badge ${w.status}` }, WO_STATUS[w.status] || w.status),
           ])))
-        : el('div', { class: 'muted' }, 'Engin þjónusta skráð.'),
+        : el('div', { class: 'muted' }, 'No service recorded.'),
     ]);
 
     mount(container, el('div', {}, [back, info, locSection, equipSection, woSection]));
@@ -171,7 +171,7 @@ async function renderDetail(container, id) {
 function headRow(title, onAdd) {
   return el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
     el('h3', { style: { margin: 0 } }, title),
-    btn('+ Bæta við', onAdd, { class: 'btn-ghost btn-sm' }),
+    btn('+ Add', onAdd, { class: 'btn-ghost btn-sm' }),
   ]);
 }
 
@@ -184,14 +184,14 @@ function locationForm(customerId, existing, onDone) {
     access_notes: el('textarea', {}, existing?.access_notes || ''),
   };
   const body = el('div', { class: 'form-grid' }, [
-    fieldRow('Heiti (t.d. Hamraborg)', f.name, true),
-    fieldRow('Heimilisfang', f.address),
-    fieldRow('Póstnúmer', f.postal_code),
-    fieldRow('Staður', f.city),
-    fieldRow('Aðgangsupplýsingar (lyklaboð, staðsetning bekkja…)', f.access_notes, true),
+    fieldRow('Name (e.g. High Street)', f.name, true),
+    fieldRow('Address', f.address),
+    fieldRow('Postcode', f.postal_code),
+    fieldRow('Town / city', f.city),
+    fieldRow('Access notes (key code, where the beds are…)', f.access_notes, true),
   ]);
   modal({
-    title: existing ? 'Breyta starfsstöð' : 'Ný starfsstöð',
+    title: existing ? 'Edit location' : 'New location',
     body,
     onSave: async () => {
       const payload = {
@@ -207,7 +207,7 @@ function locationForm(customerId, existing, onDone) {
         : sb.from('locations').insert(payload);
       const { error } = await q;
       if (error) { toast(error.message, 'err'); return false; }
-      toast('Vistað.');
+      toast('Saved.');
       onDone && onDone();
     },
   });

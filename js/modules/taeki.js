@@ -1,4 +1,4 @@
-// modules/taeki.js — Tæki (ljósabekkir): listi, spjaldskrá, peruskipti.
+// modules/taeki.js — Equipment (sunbeds): list, profile, bulb changes.
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { listCustomers, listLocations, listProducts, listEquipment } from '../db.js';
@@ -14,24 +14,24 @@ export async function render(container, param) {
   return renderList(container);
 }
 
-// ---------------- Listi ----------------
+// ---------------- List ----------------
 async function renderList(container) {
-  mount(container, el('div', { class: 'empty' }, 'Hleð…'));
+  mount(container, el('div', { class: 'empty' }, 'Loading…'));
   let rows;
   try { rows = await listEquipment(); }
   catch (e) { return errorView(container, e.message); }
 
-  const search = el('input', { type: 'search', placeholder: 'Leita (gerð, raðnúmer, viðskiptavinur)…', style: { maxWidth: '320px' } });
+  const search = el('input', { type: 'search', placeholder: 'Search (model, serial, customer)…', style: { maxWidth: '320px' } });
   const listWrap = el('div', {});
   function draw() {
     const t = search.value.trim().toLowerCase();
     const list = rows.filter((e) => !t ||
       [e.brand, e.model, e.serial_number, e.customers?.name].some((x) => (x || '').toLowerCase().includes(t)));
-    if (!list.length) { mount(listWrap, el('div', { class: 'empty' }, 'Ekkert tæki.')); return; }
+    if (!list.length) { mount(listWrap, el('div', { class: 'empty' }, 'No equipment.')); return; }
     mount(listWrap, list.map((e) => el('a', { class: 'list-item', href: `#/taeki/${e.id}` }, [
       el('div', { class: 'grow' }, [
-        el('div', { class: 'title' }, [e.brand, e.model].filter(Boolean).join(' ') || 'Bekkur'),
-        el('div', { class: 'sub' }, [e.customers?.name, e.locations?.name, e.serial_number && ('nr. ' + e.serial_number)].filter(Boolean).join(' · ')),
+        el('div', { class: 'title' }, [e.brand, e.model].filter(Boolean).join(' ') || 'Sunbed'),
+        el('div', { class: 'sub' }, [e.customers?.name, e.locations?.name, e.serial_number && ('S/N ' + e.serial_number)].filter(Boolean).join(' · ')),
       ]),
       el('span', { class: `badge ${e.status === 'in_service' ? 'done' : e.status === 'needs_service' ? 'urgent' : 'cancelled'}` }, EQUIP_STATUS[e.status] || e.status),
     ])));
@@ -39,9 +39,9 @@ async function renderList(container) {
   search.addEventListener('input', draw);
   mount(container, el('div', {}, [
     el('div', { class: 'page-head' }, [
-      el('h2', {}, 'Tæki'),
+      el('h2', {}, 'Equipment'),
       el('span', { class: 'spacer' }),
-      btn('+ Nýtt tæki', () => equipForm(container, null), { class: 'btn-primary' }),
+      btn('+ New equipment', () => equipForm(container, null), { class: 'btn-primary' }),
     ]),
     el('div', { class: 'row', style: { marginBottom: '12px' } }, search),
     listWrap,
@@ -51,21 +51,21 @@ async function renderList(container) {
 
 // ---------------- Form ----------------
 async function equipForm(container, existing) {
-  mount(container, el('div', { class: 'empty' }, 'Hleð…'));
+  mount(container, el('div', { class: 'empty' }, 'Loading…'));
   const pre = prefill.take();
   let customers = [];
   try { customers = await listCustomers({ activeOnly: true }); }
   catch (e) { return errorView(container, e.message); }
 
-  const custSel = el('select', {}, [el('option', { value: '' }, '— Veldu viðskiptavin —'),
+  const custSel = el('select', {}, [el('option', { value: '' }, '— Select customer —'),
     ...customers.map((c) => el('option', { value: c.id, selected: (existing?.customer_id || pre?.customerId) === c.id }, c.name))]);
-  const locSel = el('select', {}, [el('option', { value: '' }, '— Engin —')]);
+  const locSel = el('select', {}, [el('option', { value: '' }, '— None —')]);
 
   async function loadLocs(customerId, selectedId) {
-    locSel.replaceChildren(el('option', { value: '' }, '— Engin —'));
+    locSel.replaceChildren(el('option', { value: '' }, '— None —'));
     if (!customerId) return;
     const locs = await listLocations(customerId);
-    locs.forEach((l) => locSel.append(el('option', { value: l.id, selected: l.id === selectedId }, l.name || l.address || 'Starfsstöð')));
+    locs.forEach((l) => locSel.append(el('option', { value: l.id, selected: l.id === selectedId }, l.name || l.address || 'Location')));
   }
   custSel.addEventListener('change', () => loadLocs(custSel.value, null));
   await loadLocs(custSel.value, existing?.location_id);
@@ -84,22 +84,22 @@ async function equipForm(container, existing) {
   };
 
   const form = el('div', { class: 'form-grid' }, [
-    fieldRow('Viðskiptavinur *', custSel, true),
-    fieldRow('Starfsstöð', locSel, true),
-    fieldRow('Framleiðandi', f.brand),
-    fieldRow('Gerð', f.model),
-    fieldRow('Raðnúmer', f.serial),
-    fieldRow('Uppsett', f.install),
-    fieldRow('Staða', f.status),
-    fieldRow('Perutegund', f.bulbType),
-    fieldRow('Fjöldi líkamspera', f.bulbCount),
-    fieldRow('Fjöldi andlitspera', f.facial),
-    fieldRow('Núv. peru-klst', f.hours),
-    fieldRow('Athugasemdir', f.notes, true),
+    fieldRow('Customer *', custSel, true),
+    fieldRow('Location', locSel, true),
+    fieldRow('Manufacturer', f.brand),
+    fieldRow('Model', f.model),
+    fieldRow('Serial number', f.serial),
+    fieldRow('Installed', f.install),
+    fieldRow('Status', f.status),
+    fieldRow('Bulb type', f.bulbType),
+    fieldRow('Body bulbs', f.bulbCount),
+    fieldRow('Facial bulbs', f.facial),
+    fieldRow('Current bulb hours', f.hours),
+    fieldRow('Notes', f.notes, true),
   ]);
 
-  const save = btn(existing ? 'Vista breytingar' : 'Stofna tæki', async () => {
-    if (!custSel.value) { toast('Veldu viðskiptavin.', 'err'); return; }
+  const save = btn(existing ? 'Save changes' : 'Create equipment', async () => {
+    if (!custSel.value) { toast('Select a customer.', 'err'); return; }
     save.disabled = true;
     const payload = {
       customer_id: custSel.value,
@@ -121,21 +121,21 @@ async function equipForm(container, existing) {
     const { data, error } = await q;
     save.disabled = false;
     if (error) { toast(error.message, 'err'); return; }
-    toast('Vistað.');
+    toast('Saved.');
     navigate('/taeki/' + (existing?.id || data.id));
   }, { class: 'btn-primary' });
 
   mount(container, el('div', {}, [
-    el('a', { href: '#/taeki', class: 'link-btn' }, '← Tæki'),
-    el('div', { class: 'page-head' }, el('h2', {}, existing ? 'Breyta tæki' : 'Nýtt tæki')),
+    el('a', { href: '#/taeki', class: 'link-btn' }, '← Equipment'),
+    el('div', { class: 'page-head' }, el('h2', {}, existing ? 'Edit equipment' : 'New equipment')),
     el('div', { class: 'card' }, form),
     el('div', { class: 'row' }, save),
   ]));
 }
 
-// ---------------- Spjaldskrá ----------------
+// ---------------- Profile ----------------
 async function renderDetail(container, id) {
-  mount(container, el('div', { class: 'empty' }, 'Hleð…'));
+  mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
     const [eqRes, bcRes] = await Promise.all([
       sb.from('equipment').select('*, customers(id,name), locations(name)').eq('id', id).maybeSingle(),
@@ -143,47 +143,47 @@ async function renderDetail(container, id) {
     ]);
     if (eqRes.error) throw eqRes.error;
     const eq = eqRes.data;
-    if (!eq) return errorView(container, 'Tæki fannst ekki.');
+    if (!eq) return errorView(container, 'Equipment not found.');
     const changes = bcRes.data || [];
 
     const info = el('div', { class: 'card' }, [
       el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
-        el('h2', { style: { margin: 0 } }, [eq.brand, eq.model].filter(Boolean).join(' ') || 'Bekkur'),
-        btn('Breyta', () => equipForm(container, eq), { class: 'btn-ghost btn-sm' }),
+        el('h2', { style: { margin: 0 } }, [eq.brand, eq.model].filter(Boolean).join(' ') || 'Sunbed'),
+        btn('Edit', () => equipForm(container, eq), { class: 'btn-ghost btn-sm' }),
       ]),
       el('div', { class: 'muted', style: { marginTop: '6px' } }, [
         eq.customers && el('a', { href: `#/vidskiptavinir/${eq.customers.id}`, class: 'link-btn' }, eq.customers.name),
       ]),
       infoGrid([
-        ['Raðnúmer', eq.serial_number],
-        ['Starfsstöð', eq.locations?.name],
-        ['Staða', EQUIP_STATUS[eq.status]],
-        ['Uppsett', fmtDate(eq.install_date)],
-        ['Perutegund', eq.bulb_type],
-        ['Líkamsperur', eq.bulb_count],
-        ['Andlitsperur', eq.facial_bulb_count],
-        ['Núv. peru-klst', eq.current_bulb_hours],
+        ['Serial number', eq.serial_number],
+        ['Location', eq.locations?.name],
+        ['Status', EQUIP_STATUS[eq.status]],
+        ['Installed', fmtDate(eq.install_date)],
+        ['Bulb type', eq.bulb_type],
+        ['Body bulbs', eq.bulb_count],
+        ['Facial bulbs', eq.facial_bulb_count],
+        ['Current bulb hours', eq.current_bulb_hours],
       ]),
       eq.notes ? el('p', {}, eq.notes) : null,
     ]);
 
     const bulbSection = el('div', { class: 'card' }, [
       el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
-        el('h3', { style: { margin: 0 } }, 'Perusaga'),
-        btn('+ Skrá peruskipti', () => bulbChangeForm(eq, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
+        el('h3', { style: { margin: 0 } }, 'Bulb history'),
+        btn('+ Log bulb change', () => bulbChangeForm(eq, () => renderDetail(container, id)), { class: 'btn-ghost btn-sm' }),
       ]),
       changes.length
         ? el('div', {}, changes.map((c) => el('div', { class: 'list-item' }, [
             el('div', { class: 'grow' }, [
-              el('div', { class: 'title' }, fmtDate(c.changed_at) + (c.quantity ? ` · ${c.quantity} perur` : '')),
-              el('div', { class: 'sub' }, [c.products?.name, c.hours_at_change != null && (`${c.hours_at_change} klst`), c.profiles?.full_name, c.notes].filter(Boolean).join(' · ')),
+              el('div', { class: 'title' }, fmtDate(c.changed_at) + (c.quantity ? ` · ${c.quantity} bulbs` : '')),
+              el('div', { class: 'sub' }, [c.products?.name, c.hours_at_change != null && (`${c.hours_at_change} hrs`), c.profiles?.full_name, c.notes].filter(Boolean).join(' · ')),
             ]),
           ])))
-        : el('div', { class: 'muted' }, 'Engin peruskipti skráð.'),
+        : el('div', { class: 'muted' }, 'No bulb changes recorded.'),
     ]);
 
     mount(container, el('div', {}, [
-      el('a', { href: '#/taeki', class: 'link-btn' }, '← Tæki'),
+      el('a', { href: '#/taeki', class: 'link-btn' }, '← Equipment'),
       info, bulbSection,
     ]));
   } catch (e) {
@@ -206,7 +206,7 @@ async function bulbChangeForm(eq, onDone) {
   try { bulbs = await listProducts({ category: 'bulb' }); } catch { /* skip */ }
   const f = {
     date: el('input', { type: 'date', value: todayISO() }),
-    product: el('select', {}, [el('option', { value: '' }, '— Perutegund (valfrjálst) —'),
+    product: el('select', {}, [el('option', { value: '' }, '— Bulb type (optional) —'),
       ...bulbs.map((b) => el('option', { value: b.id }, b.name))]),
     qty: el('input', { type: 'number', value: eq.bulb_count ?? '' }),
     hours: el('input', { type: 'number', step: '0.1', value: eq.current_bulb_hours ?? '' }),
@@ -214,15 +214,15 @@ async function bulbChangeForm(eq, onDone) {
     reset: el('input', { type: 'checkbox', checked: true }),
   };
   const body = el('div', { class: 'form-grid' }, [
-    fieldRow('Dagsetning', f.date),
-    fieldRow('Fjöldi pera', f.qty),
-    fieldRow('Perutegund', f.product, true),
-    fieldRow('Klst á bekk við skipti', f.hours),
-    el('div', { class: 'field' }, [el('label', {}, 'Núllstilla peru-klst eftir skipti'), el('div', { class: 'row' }, [f.reset, el('span', { class: 'muted' }, 'Já')])]),
-    fieldRow('Athugasemdir', f.notes, true),
+    fieldRow('Date', f.date),
+    fieldRow('Number of bulbs', f.qty),
+    fieldRow('Bulb type', f.product, true),
+    fieldRow('Hours on bed at change', f.hours),
+    el('div', { class: 'field' }, [el('label', {}, 'Reset bulb hours after change'), el('div', { class: 'row' }, [f.reset, el('span', { class: 'muted' }, 'Yes')])]),
+    fieldRow('Notes', f.notes, true),
   ]);
   modal({
-    title: 'Skrá peruskipti',
+    title: 'Log bulb change',
     body,
     onSave: async () => {
       const payload = {
@@ -236,11 +236,10 @@ async function bulbChangeForm(eq, onDone) {
       };
       const { error } = await sb.from('bulb_changes').insert(payload);
       if (error) { toast(error.message, 'err'); return false; }
-      // Núllstilla peru-klst á bekknum ef valið
       if (f.reset.checked) {
         await sb.from('equipment').update({ current_bulb_hours: 0 }).eq('id', eq.id);
       }
-      toast('Peruskipti skráð.');
+      toast('Bulb change logged.');
       onDone && onDone();
     },
   });

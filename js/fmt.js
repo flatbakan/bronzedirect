@@ -1,35 +1,36 @@
-// fmt.js — Snið (dagsetningar, verð, textar á íslensku).
+// fmt.js — Formatting (dates, money, English labels).
+import { LOCALE, CURRENCY } from './config.js';
 
 export const WO_TYPE = {
-  install: 'Uppsetning', repair: 'Viðgerð', bulb_change: 'Peruskipti',
-  maintenance: 'Viðhald', inspection: 'Skoðun', other: 'Annað',
+  install: 'Installation', repair: 'Repair', bulb_change: 'Bulb change',
+  maintenance: 'Maintenance', inspection: 'Inspection', other: 'Other',
 };
 export const WO_STATUS = {
-  new: 'Nýtt', scheduled: 'Áætlað', in_progress: 'Í vinnslu',
-  done: 'Lokið', invoiced: 'Reikningsfært', cancelled: 'Aflýst',
+  new: 'New', scheduled: 'Scheduled', in_progress: 'In progress',
+  done: 'Done', invoiced: 'Invoiced', cancelled: 'Cancelled',
 };
-export const WO_PRIORITY = { low: 'Lág', normal: 'Venjuleg', high: 'Há', urgent: 'Áríðandi' };
-export const PRODUCT_CAT = { bed: 'Ljósabekkur', bulb: 'Pera', part: 'Varahlutur', accessory: 'Aukahlutur' };
-export const EQUIP_STATUS = { in_service: 'Í notkun', needs_service: 'Þarf þjónustu', removed: 'Fjarlægt' };
+export const WO_PRIORITY = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
+export const PRODUCT_CAT = { bed: 'Sunbed', bulb: 'Bulb / tube', part: 'Spare part', accessory: 'Accessory' };
+export const EQUIP_STATUS = { in_service: 'In service', needs_service: 'Needs service', removed: 'Removed' };
 
 export function fmtDate(v) {
   if (!v) return '';
   const d = new Date(v);
   if (isNaN(d)) return '';
-  return d.toLocaleDateString('is-IS', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 export function fmtDateTime(v) {
   if (!v) return '';
   const d = new Date(v);
   if (isNaN(d)) return '';
-  return d.toLocaleString('is-IS', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-export function fmtKr(v) {
+export function money(v) {
   if (v == null || v === '') return '';
-  return new Intl.NumberFormat('is-IS', { style: 'currency', currency: 'ISK', maximumFractionDigits: 0 }).format(Number(v));
+  return new Intl.NumberFormat(LOCALE, { style: 'currency', currency: CURRENCY, maximumFractionDigits: 2 }).format(Number(v));
 }
 
-// Fyrir <input type="datetime-local"> — skilar 'YYYY-MM-DDTHH:mm' í staðartíma.
+// For <input type="datetime-local"> — returns 'YYYY-MM-DDTHH:mm' in local time.
 export function toLocalInput(v) {
   const d = v ? new Date(v) : new Date();
   if (isNaN(d)) return '';

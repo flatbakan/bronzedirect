@@ -1,4 +1,4 @@
-// modules/idag.js — Mælaborð: verk dagsins og staða.
+// modules/idag.js — Dashboard: today's jobs and status.
 import { el, mount } from '../render.js';
 import { sb } from '../supabase.js';
 import { getProfile } from '../auth.js';
@@ -6,7 +6,7 @@ import { WO_TYPE, WO_STATUS, fmtDateTime } from '../fmt.js';
 import { errorView } from '../ui.js';
 
 function woLink(wo) {
-  const cust = wo.customers?.name || 'Óþekktur';
+  const cust = wo.customers?.name || 'Unknown';
   return el('a', { class: 'list-item', href: `#/verkbeidnir/${wo.id}` }, [
     el('div', { class: 'grow' }, [
       el('div', { class: 'title' }, `#${wo.number} · ${cust}`),
@@ -21,7 +21,7 @@ function woLink(wo) {
 }
 
 export async function render(container) {
-  mount(container, el('div', { class: 'empty' }, 'Hleð…'));
+  mount(container, el('div', { class: 'empty' }, 'Loading…'));
   const me = getProfile();
 
   try {
@@ -40,32 +40,32 @@ export async function render(container) {
     const byStatus = (s) => open.filter((w) => w.status === s).length;
 
     const stats = el('div', { class: 'stat-grid' }, [
-      stat(open.length, 'Opin verk'),
-      stat(byStatus('scheduled'), 'Áætluð'),
-      stat(byStatus('in_progress'), 'Í vinnslu'),
-      stat(byStatus('new'), 'Ný / óúthlutað'),
+      stat(open.length, 'Open jobs'),
+      stat(byStatus('scheduled'), 'Scheduled'),
+      stat(byStatus('in_progress'), 'In progress'),
+      stat(byStatus('new'), 'New / unassigned'),
     ]);
 
     const mineSection = el('div', {}, [
-      el('div', { class: 'page-head', style: { marginTop: '20px' } }, el('h2', {}, 'Mín verk')),
+      el('div', { class: 'page-head', style: { marginTop: '20px' } }, el('h2', {}, 'My jobs')),
       mine.length
         ? el('div', {}, mine.map(woLink))
-        : el('div', { class: 'empty' }, 'Engin verk úthlutuð á þig.'),
+        : el('div', { class: 'empty' }, 'No jobs assigned to you.'),
     ]);
 
     const allSection = el('div', {}, [
       el('div', { class: 'page-head', style: { marginTop: '20px' } }, [
-        el('h2', {}, 'Öll opin verk'),
+        el('h2', {}, 'All open jobs'),
         el('span', { class: 'spacer' }),
-        el('a', { class: 'btn-primary btn-sm', href: '#/verkbeidnir', style: { textDecoration: 'none', padding: '8px 12px', borderRadius: '10px' } }, 'Öll verk →'),
+        el('a', { class: 'btn-primary btn-sm', href: '#/verkbeidnir', style: { textDecoration: 'none', padding: '8px 12px', borderRadius: '10px' } }, 'All jobs →'),
       ]),
       open.length
         ? el('div', {}, open.slice(0, 12).map(woLink))
-        : el('div', { class: 'empty' }, 'Engin opin verk. 🎉'),
+        : el('div', { class: 'empty' }, 'No open jobs. 🎉'),
     ]);
 
     mount(container, el('div', {}, [
-      el('div', { class: 'page-head' }, el('h2', {}, `Góðan dag${me?.full_name ? ', ' + me.full_name.split(' ')[0] : ''}`)),
+      el('div', { class: 'page-head' }, el('h2', {}, `Hello${me?.full_name ? ', ' + me.full_name.split(' ')[0] : ''}`)),
       stats,
       mineSection,
       allSection,

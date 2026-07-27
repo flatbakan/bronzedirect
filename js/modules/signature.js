@@ -32,7 +32,7 @@ export function signaturePad() {
   canvas.addEventListener('touchmove', move, { passive: false });
   canvas.addEventListener('touchend', end);
 
-  const clearBtn = btn('Hreinsa', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); inked = false; }, { class: 'btn-ghost btn-sm' });
+  const clearBtn = btn('Clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); inked = false; }, { class: 'btn-ghost btn-sm' });
 
   const element = el('div', {}, [
     canvas,
