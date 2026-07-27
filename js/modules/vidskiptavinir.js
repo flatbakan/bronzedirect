@@ -58,6 +58,9 @@ function customerForm(existing, onDone) {
     phone: el('input', { value: existing?.phone || '' }),
     email: el('input', { type: 'email', value: existing?.email || '' }),
     contact_name: el('input', { value: existing?.contact_name || '' }),
+    address: el('input', { value: existing?.address || '' }),
+    postal_code: el('input', { value: existing?.postal_code || '' }),
+    city: el('input', { value: existing?.city || '' }),
     notes: el('textarea', {}, existing?.notes || ''),
   };
   const body = el('div', { class: 'form-grid' }, [
@@ -66,6 +69,9 @@ function customerForm(existing, onDone) {
     fieldRow('Phone', f.phone),
     fieldRow('Email', f.email),
     fieldRow('Contact person', f.contact_name),
+    fieldRow('Billing address', f.address, true),
+    fieldRow('Postcode', f.postal_code),
+    fieldRow('Town / city', f.city),
     fieldRow('Notes', f.notes, true),
   ]);
   modal({
@@ -78,6 +84,9 @@ function customerForm(existing, onDone) {
         phone: f.phone.value.trim() || null,
         email: f.email.value.trim() || null,
         contact_name: f.contact_name.value.trim() || null,
+        address: f.address.value.trim() || null,
+        postal_code: f.postal_code.value.trim() || null,
+        city: f.city.value.trim() || null,
         notes: f.notes.value.trim() || null,
       };
       if (!payload.name) { toast('Name is required.', 'err'); return false; }
@@ -125,6 +134,8 @@ async function renderDetail(container, id) {
       el('div', { class: 'muted', style: { marginTop: '8px' } },
         [customer.kennitala && ('Reg. ' + customer.kennitala), customer.phone, customer.email, customer.contact_name]
           .filter(Boolean).join(' · ')),
+      (customer.address || customer.city) ? el('div', { class: 'muted', style: { marginTop: '4px' } },
+        [customer.address, customer.postal_code, customer.city].filter(Boolean).join(', ')) : null,
       customer.notes ? el('p', {}, customer.notes) : null,
     ]);
 

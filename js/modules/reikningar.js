@@ -42,7 +42,7 @@ async function renderDetail(container, id) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
     const [invRes, linesRes, company] = await Promise.all([
-      sb.from('invoices').select('*, customers(name,kennitala,address)').eq('id', id).maybeSingle(),
+      sb.from('invoices').select('*, customers(name,kennitala,address,postal_code,city)').eq('id', id).maybeSingle(),
       sb.from('invoice_lines').select('*').eq('invoice_id', id).order('created_at'),
       sb.from('company_settings').select('*').eq('id', 1).maybeSingle(),
     ]);
@@ -89,7 +89,11 @@ async function renderDetail(container, id) {
       el('div', { class: 'card' }, [
         el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
           el('div', {}, [el('strong', {}, co.company_name || 'Bronze Direct'), el('div', { class: 'muted' }, [co.address, co.kennitala && ('Reg. ' + co.kennitala)].filter(Boolean).join(' · '))]),
-          el('div', { style: { textAlign: 'right' } }, [el('strong', {}, inv.customers?.name || ''), el('div', { class: 'muted' }, [inv.customers?.kennitala && ('Reg. ' + inv.customers.kennitala), inv.customers?.address].filter(Boolean).join(' · '))]),
+          el('div', { style: { textAlign: 'right' } }, [
+            el('strong', {}, inv.customers?.name || ''),
+            el('div', { class: 'muted' }, [inv.customers?.address, inv.customers?.postal_code, inv.customers?.city].filter(Boolean).join(', ')),
+            el('div', { class: 'muted' }, inv.customers?.kennitala ? ('Reg. ' + inv.customers.kennitala) : ''),
+          ]),
         ]),
         el('div', { class: 'muted', style: { marginTop: '10px' } }, `Date: ${fmtDate(inv.issue_date)}`),
       ]),
