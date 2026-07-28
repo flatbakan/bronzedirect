@@ -20,6 +20,7 @@ function logo(height) {
 // -------- Navigation --------
 const NAV = [
   { path: '/idag',          label: 'Today',        ico: '📅' },
+  { path: '/maelabord',     label: 'Dashboard',    ico: '📊' },
   { path: '/dagatal',       label: 'Schedule',     ico: '🗓️' },
   { path: '/verkbeidnir',   label: 'Work orders',  ico: '🧰' },
   { path: '/vidskiptavinir',label: 'Customers',    ico: '🏢' },
@@ -36,6 +37,7 @@ const NAV = [
 // Module files (lazy import). Contract: render(container, param).
 const MODULES = {
   '/idag':           () => import('./modules/idag.js'),
+  '/maelabord':      () => import('./modules/maelabord.js'),
   '/dagatal':        () => import('./modules/dagatal.js'),
   '/verkbeidnir':    () => import('./modules/verkbeidnir.js'),
   '/vidskiptavinir': () => import('./modules/vidskiptavinir.js'),
