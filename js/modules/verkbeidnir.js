@@ -111,7 +111,7 @@ async function woForm(container) {
     equip.forEach((e) => eqSel.append(el('option', { value: e.id }, [e.brand, e.model, e.serial_number].filter(Boolean).join(' ') || 'Sunbed')));
   }
   custSel.addEventListener('change', () => loadChildren(custSel.value));
-  if (custSel.value) await loadChildren(custSel.value);
+  if (custSel.value) { await loadChildren(custSel.value); if (pre?.equipmentId) eqSel.value = pre.equipmentId; }
 
   const f = {
     type: el('select', {}, Object.entries(WO_TYPE).map(([v, l]) => el('option', { value: v, selected: v === 'repair' }, l))),

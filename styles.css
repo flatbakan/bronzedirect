@@ -177,6 +177,14 @@ button:disabled { opacity: .55; cursor: default; }
 .meter.due > span { background: var(--danger); }
 a.linkish { color: var(--brand-mid); text-decoration: none; }
 a.linkish:hover { text-decoration: underline; }
+
+.tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--border); margin-bottom: 16px; -webkit-overflow-scrolling: touch; }
+.tabs button { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 14px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.tabs button:hover { color: var(--text); filter: none; }
+.tabs button.active { color: var(--brand-mid); border-bottom-color: var(--brand-2); }
+.tabcount { font-size: 11px; background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 1px 6px; margin-left: 5px; }
+.timeline-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.timeline-item .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-2); margin-top: 6px; flex-shrink: 0; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 12px; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow-sm); }
 .stat .n { font-size: 26px; font-weight: 700; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }

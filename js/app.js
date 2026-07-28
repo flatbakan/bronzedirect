@@ -23,7 +23,7 @@ const NAV = [
   { path: '/dagatal',       label: 'Schedule',     ico: '🗓️' },
   { path: '/verkbeidnir',   label: 'Work orders',  ico: '🧰' },
   { path: '/vidskiptavinir',label: 'Customers',    ico: '🏢' },
-  { path: '/taeki',         label: 'Equipment',    ico: '🛏️' },
+  { path: '/taeki',         label: 'Assets',       ico: '🛏️' },
   { path: '/tilkynningar',  label: 'Announcements',ico: '📢' },
   { sep: 'Office' },
   { path: '/vorur',         label: 'Products',     ico: '📦' },
