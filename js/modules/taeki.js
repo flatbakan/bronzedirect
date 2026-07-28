@@ -192,6 +192,7 @@ async function renderDetail(container, id) {
     el('div', { class: 'row', style: { marginTop: '10px' } }, [
       asset.customers ? el('a', { href: `#/vidskiptavinir/${asset.customers.id}`, class: 'link-btn' }, '↗ Customer') : null,
       btn('Edit', () => equipForm(container, asset), { class: 'btn-ghost btn-sm' }),
+      btn('🏷 QR', () => showQr(asset), { class: 'btn-ghost btn-sm' }),
       btn('+ Work order', () => { prefill.set({ customerId: asset.customer_id, equipmentId: asset.id }); navigate('/verkbeidnir/new'); }, { class: 'btn-primary btn-sm' }),
       btn(asset.archived ? 'Unarchive' : 'Archive', async () => {
         const { error } = await sb.from('equipment').update({ archived: !asset.archived }).eq('id', id);
@@ -448,6 +449,43 @@ async function tabParts(asset, content) {
     ])),
     el('div', { class: 'row', style: { justifyContent: 'flex-end', fontWeight: '600', marginTop: '6px' } }, `Total: ${money(total)}`),
   ]));
+}
+
+// ---------------- QR code ----------------
+function assetUrl(id) {
+  return location.origin + location.pathname + '#/taeki/' + id;
+}
+
+async function showQr(asset) {
+  const canvas = el('canvas', { width: 240, height: 240 });
+  const printBtn = btn('🖨 Print label', () => {}, { class: 'btn-primary btn-sm' });
+  const body = el('div', { style: { textAlign: 'center' } }, [
+    canvas,
+    el('div', { style: { fontWeight: '600', marginTop: '8px' } }, assetName(asset)),
+    asset.asset_no ? el('div', { class: 'muted', style: { fontSize: '12px' } }, '#A' + asset.asset_no) : null,
+    el('div', { class: 'row', style: { justifyContent: 'center', marginTop: '12px' } }, printBtn),
+  ]);
+  modal({ title: 'Asset QR code', hideSave: true, body });
+  try {
+    const QR = (await import('https://esm.sh/qrcode@1.5.4')).default;
+    await QR.toCanvas(canvas, assetUrl(asset.id), { width: 240, margin: 1, color: { dark: '#531E52', light: '#ffffff' } });
+    printBtn.addEventListener('click', () => printLabel(asset, canvas.toDataURL('image/png')));
+  } catch (e) {
+    body.replaceChildren(el('div', { class: 'msg err' }, 'Could not generate QR: ' + (e.message || e)));
+  }
+}
+
+function printLabel(asset, dataUrl) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to print.', 'err'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR ${esc(assetName(asset))}</title>
+    <style>body{font-family:Segoe UI,system-ui,Arial,sans-serif;text-align:center;padding:24px}
+    .brand{color:#8a2f78;font-weight:700;letter-spacing:.5px}img{width:260px;height:260px}h2{margin:8px 0 2px}</style></head>
+    <body><div class="brand">BRONZE DIRECT</div><img src="${dataUrl}"><h2>${esc(assetName(asset))}</h2>
+    <div>${asset.asset_no ? '#A' + asset.asset_no : ''}${asset.serial_number ? ' · S/N ' + esc(asset.serial_number) : ''}</div>
+    </body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
 }
 
 // ---------------- Shared bits ----------------
