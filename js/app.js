@@ -247,4 +247,11 @@ auth.onAuthChange((session) => {
   if (!session && !document.querySelector('.auth-wrap')) boot();
 });
 
+// Register service worker (PWA / installable). Ignored on http/file, works on https.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW registration failed', e));
+  });
+}
+
 boot();
