@@ -1,11 +1,13 @@
 // modules/maelabord.js — Dashboard / KPIs. Cost & revenue cards are admin-only.
-import { el, mount } from '../render.js';
+import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
+import { navigate } from '../router.js';
 import { isAdmin } from '../auth.js';
-import { getSettings } from '../db.js';
-import { money, isOverdue, isBulbDue, WO_OPEN, WO_TYPE } from '../fmt.js';
+import { getSettings, dueMaintenance } from '../db.js';
+import { generateFromPlan } from '../maintenance.js';
+import { money, isOverdue, isBulbDue, WO_OPEN, fmtDate } from '../fmt.js';
 import { barChart } from '../chart.js';
-import { errorView } from '../ui.js';
+import { errorView, toast, confirmDialog } from '../ui.js';
 
 const DAY = 86400000;
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -31,6 +33,7 @@ export async function render(container) {
       sb.from('work_order_time_logs').select('technician_id').is('clock_out', null),
       sb.from('work_orders').select('equipment_id, equipment(name,brand,model)').not('equipment_id', 'is', null),
       getSettings(),
+      dueMaintenance(7).catch(() => []),
     ];
     if (admin) {
       jobs.push(sb.from('invoices').select('kind,status,issue_date,vat_rate, invoice_lines(quantity,unit_price)').gte('issue_date', sixMonthsAgo.toISOString().slice(0, 10)));
@@ -42,7 +45,8 @@ export async function render(container) {
     const clockedIn = res[3].data || [];
     const repaired = res[4].data || [];
     const settings = res[5] || {};
-    const invoices = admin ? (res[6].data || []) : [];
+    const maintDue = res[6] || [];
+    const invoices = admin ? (res[7].data || []) : [];
 
     // ---- KPIs (everyone) ----
     const overdue = open.filter((w) => isOverdue(w.due_date)).length;
@@ -60,7 +64,25 @@ export async function render(container) {
       kpi(completedToday, 'Completed today'),
       kpi(techsActive, 'Techs clocked in'),
       kpi(bulbsDue, 'Bulbs due', bulbsDue > 0 ? 'warn' : null),
+      kpi(maintDue.length, 'Maintenance due', maintDue.length > 0 ? 'warn' : null),
     ];
+
+    const assetLabel = (eq) => eq ? (eq.name || [eq.brand, eq.model].filter(Boolean).join(' ') || 'Asset') : 'Asset';
+    const maintCard = maintDue.length ? el('div', { class: 'card' }, [
+      el('h3', { style: { marginTop: 0 } }, 'Maintenance due'),
+      el('div', {}, maintDue.map((p) => el('div', { class: 'list-item' }, [
+        el('a', { class: 'grow', href: `#/taeki/${p.equipment_id}`, style: { textDecoration: 'none', color: 'inherit' } }, [
+          el('div', { class: 'title' }, p.title),
+          el('div', { class: 'sub' }, [assetLabel(p.equipment), p.equipment?.customers?.name, 'due ' + fmtDate(p.next_due_date)].filter(Boolean).join(' · ')),
+        ]),
+        el('span', { class: `badge ${isOverdue(p.next_due_date) ? 'urgent' : 'scheduled'}` }, isOverdue(p.next_due_date) ? 'Due' : 'Soon'),
+        btn('Create WO', async () => {
+          if (!(await confirmDialog(`Create work order for "${p.title}"?`, { danger: false, confirmLabel: 'Create' }))) return;
+          try { const woId = await generateFromPlan(p); toast('Work order created.'); navigate('/verkbeidnir/' + woId); }
+          catch (e) { toast(e.message, 'err'); }
+        }, { class: 'btn-primary btn-sm' }),
+      ]))),
+    ]) : null;
 
     // ---- Completed per day (14 days) ----
     const perDay = [];
@@ -120,6 +142,7 @@ export async function render(container) {
     mount(container, el('div', {}, [
       el('div', { class: 'page-head' }, el('h2', {}, 'Dashboard')),
       el('div', { class: 'stat-grid' }, kpis),
+      maintCard,
       chartCard('Completed jobs (last 14 days)', barChart(perDay, { labelEvery: 1 })),
       el('div', { class: 'card' }, [
         el('h3', { style: { marginTop: 0 } }, 'Most repaired assets'),

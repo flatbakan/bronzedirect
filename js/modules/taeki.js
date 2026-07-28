@@ -2,14 +2,18 @@
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
-import { listCustomers, listLocations, listProducts, listEquipment, getSettings } from '../db.js';
+import {
+  listCustomers, listLocations, listProducts, listEquipment, getSettings,
+  listMaintenancePlans, listChecklistTemplates, listStaff,
+} from '../db.js';
 import { getProfile } from '../auth.js';
+import { generateFromPlan } from '../maintenance.js';
 import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
 import {
-  EQUIP_STATUS, WO_TYPE, WO_STATUS, WO_OPEN, fmtDate, fmtDateTime, todayISO,
-  money, bulbLife, bulbPct, isBulbDue,
+  EQUIP_STATUS, WO_TYPE, WO_STATUS, WO_OPEN, WO_PRIORITY, fmtDate, fmtDateTime, todayISO,
+  money, bulbLife, bulbPct, isBulbDue, isOverdue,
 } from '../fmt.js';
 
 const assetName = (e) => e.name || [e.brand, e.model].filter(Boolean).join(' ') || 'Asset';
@@ -408,17 +412,57 @@ function docForm(asset, done) {
 
 // ---- Maintenance tab ----
 async function tabMaintenance(asset, settings, content) {
-  const { data } = await sb.from('work_orders').select('*, profiles:assigned_to(full_name)')
-    .eq('equipment_id', asset.id).in('type', ['maintenance', 'inspection', 'bulb_change']).order('created_at', { ascending: false });
-  const rows = data || [];
+  const rerender = () => tabMaintenance(asset, settings, content);
+  const [plans, woRes] = await Promise.all([
+    listMaintenancePlans(asset.id).catch(() => []),
+    sb.from('work_orders').select('*, profiles:assigned_to(full_name)')
+      .eq('equipment_id', asset.id).in('type', ['maintenance', 'inspection', 'bulb_change']).order('created_at', { ascending: false }),
+  ]);
+  const rows = woRes.data || [];
+
+  const planList = plans.length
+    ? el('div', {}, plans.map((p) => {
+        const due = isOverdue(p.next_due_date);
+        return el('div', { class: 'list-item' }, [
+          el('div', { class: 'grow' }, [
+            el('div', { class: 'title' }, p.title + (p.is_active ? '' : ' (paused)')),
+            el('div', { class: 'sub' }, [
+              `every ${p.interval_days} days`,
+              'next ' + fmtDate(p.next_due_date),
+              p.checklist_templates?.name && ('☑ ' + p.checklist_templates.name),
+              p.profiles?.full_name,
+            ].filter(Boolean).join(' · ')),
+          ]),
+          due && p.is_active ? el('span', { class: 'badge urgent' }, 'Due') : null,
+          btn('Create WO', async () => {
+            if (!(await confirmDialog(`Create a maintenance work order for "${p.title}"?`, { danger: false, confirmLabel: 'Create' }))) return;
+            try { const woId = await generateFromPlan(p); toast('Work order created.'); navigate('/verkbeidnir/' + woId); }
+            catch (e) { toast(e.message, 'err'); }
+          }, { class: 'btn-primary btn-sm' }),
+          btn('Edit', () => planForm(asset, p, rerender), { class: 'btn-ghost btn-sm' }),
+          btn('✕', async () => {
+            if (!(await confirmDialog('Delete maintenance plan?'))) return;
+            await sb.from('maintenance_plans').delete().eq('id', p.id); rerender();
+          }, { class: 'btn-ghost btn-sm' }),
+        ]);
+      }))
+    : el('div', { class: 'muted' }, 'No maintenance plans. Add one to schedule recurring service.');
+
   mount(content, el('div', {}, [
+    el('div', { class: 'card' }, [
+      el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
+        el('h3', { style: { margin: 0 } }, 'Maintenance plans'),
+        btn('+ Add plan', () => planForm(asset, null, rerender), { class: 'btn-ghost btn-sm' }),
+      ]),
+      planList,
+    ]),
     el('div', { class: 'card' }, [
       el('h3', { style: { marginTop: 0 } }, 'Bulb life'),
       bulbMeter(asset, settings) || el('div', { class: 'muted' }, 'No bulb-life data. Set current hours and life on the asset.'),
-      el('div', { style: { marginTop: '10px' } }, btn('+ Log bulb change', () => bulbChangeForm(asset, () => tabMaintenance(asset, settings, content)), { class: 'btn-ghost btn-sm' })),
+      el('div', { style: { marginTop: '10px' } }, btn('+ Log bulb change', () => bulbChangeForm(asset, rerender), { class: 'btn-ghost btn-sm' })),
     ]),
     el('div', { class: 'card' }, [
-      el('h3', { style: { marginTop: 0 } }, 'Maintenance & inspections'),
+      el('h3', { style: { marginTop: 0 } }, 'Maintenance & inspection history'),
       rows.length ? el('div', {}, rows.map((w) => el('a', { class: 'list-item', href: `#/verkbeidnir/${w.id}` }, [
         el('div', { class: 'grow' }, [
           el('div', { class: 'title' }, `#${w.number} · ${WO_TYPE[w.type] || w.type}`),
@@ -426,9 +470,73 @@ async function tabMaintenance(asset, settings, content) {
         ]),
         el('span', { class: `badge ${w.status}` }, WO_STATUS[w.status] || w.status),
       ]))) : el('div', { class: 'muted' }, 'No maintenance recorded.'),
-      el('p', { class: 'muted', style: { fontSize: '13px' } }, 'Recurring preventive-maintenance plans are coming in a later phase.'),
     ]),
   ]));
+}
+
+const INTERVAL_PRESETS = [
+  { label: 'Monthly', days: 30 }, { label: 'Quarterly', days: 90 },
+  { label: 'Every 6 months', days: 180 }, { label: 'Yearly', days: 365 },
+];
+
+async function planForm(asset, existing, onDone) {
+  let templates = [], staff = [];
+  try { [templates, staff] = await Promise.all([listChecklistTemplates(), listStaff()]); } catch { /* ignore */ }
+
+  const title = el('input', { value: existing?.title || '' });
+  const desc = el('textarea', {}, existing?.description || '');
+  const preset = el('select', {}, [
+    ...INTERVAL_PRESETS.map((p) => el('option', { value: p.days, selected: existing ? existing.interval_days === p.days : p.days === 180 }, p.label)),
+    el('option', { value: 'custom', selected: existing && !INTERVAL_PRESETS.some((p) => p.days === existing.interval_days) }, 'Custom (days)'),
+  ]);
+  const customDays = el('input', { type: 'number', value: existing?.interval_days ?? '', placeholder: 'days' });
+  const syncCustom = () => { customDays.style.display = preset.value === 'custom' ? '' : 'none'; };
+  preset.addEventListener('change', syncCustom); syncCustom();
+
+  const next = el('input', { type: 'date', value: existing?.next_due_date || todayISO() });
+  const tmpl = el('select', {}, [el('option', { value: '' }, '— No checklist —'),
+    ...templates.map((t) => el('option', { value: t.id, selected: existing?.checklist_template_id === t.id }, t.name))]);
+  const assigned = el('select', {}, [el('option', { value: '' }, '— Unassigned —'),
+    ...staff.map((s) => el('option', { value: s.id, selected: existing?.assigned_to === s.id }, s.full_name || s.email))]);
+  const priority = el('select', {}, Object.entries(WO_PRIORITY).map(([v, l]) => el('option', { value: v, selected: (existing?.priority || 'normal') === v }, l)));
+  const active = el('input', { type: 'checkbox', checked: existing ? existing.is_active : true });
+
+  modal({
+    title: existing ? 'Edit maintenance plan' : 'New maintenance plan',
+    body: el('div', { class: 'form-grid' }, [
+      fieldRow('Title *', title, true),
+      fieldRow('Interval', preset),
+      fieldRow('Custom interval (days)', customDays),
+      fieldRow('Next due', next),
+      fieldRow('Priority', priority),
+      fieldRow('Checklist template', tmpl, true),
+      fieldRow('Assign to', assigned, true),
+      fieldRow('Description', desc, true),
+      el('div', { class: 'field full' }, [el('label', {}, 'Active'), el('div', { class: 'row' }, [active, el('span', { class: 'muted' }, 'Appears in due lists')])]),
+    ]),
+    onSave: async () => {
+      if (!title.value.trim()) { toast('Title is required.', 'err'); return false; }
+      const days = preset.value === 'custom' ? Number(customDays.value) : Number(preset.value);
+      if (!days || days < 1) { toast('Enter a valid interval in days.', 'err'); return false; }
+      const payload = {
+        equipment_id: asset.id,
+        title: title.value.trim(),
+        description: desc.value.trim() || null,
+        interval_days: days,
+        next_due_date: next.value || todayISO(),
+        checklist_template_id: tmpl.value || null,
+        assigned_to: assigned.value || null,
+        priority: priority.value,
+        is_active: active.checked,
+      };
+      const q = existing
+        ? sb.from('maintenance_plans').update(payload).eq('id', existing.id)
+        : sb.from('maintenance_plans').insert(payload);
+      const { error } = await q;
+      if (error) { toast(error.message, 'err'); return false; }
+      toast('Saved.'); onDone && onDone();
+    },
+  });
 }
 
 // ---- Parts tab (parts ever used on this asset) ----

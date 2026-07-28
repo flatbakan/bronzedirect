@@ -38,6 +38,25 @@ export async function listProducts({ category, activeOnly = true } = {}) {
   return data || [];
 }
 
+export async function listMaintenancePlans(equipmentId) {
+  const { data, error } = await sb.from('maintenance_plans')
+    .select('*, checklist_templates(name), profiles:assigned_to(full_name)')
+    .eq('equipment_id', equipmentId).order('next_due_date');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function dueMaintenance(withinDays = 7) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() + withinDays);
+  const iso = cutoff.toISOString().slice(0, 10);
+  const { data, error } = await sb.from('maintenance_plans')
+    .select('*, equipment(id,name,brand,model,customer_id,customers(name))')
+    .eq('is_active', true).lte('next_due_date', iso).order('next_due_date');
+  if (error) throw error;
+  return data || [];
+}
+
 export async function listChecklistTemplates({ activeOnly = true } = {}) {
   let q = sb.from('checklist_templates').select('*').order('name');
   if (activeOnly) q = q.eq('is_active', true);
