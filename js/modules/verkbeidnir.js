@@ -2,7 +2,7 @@
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { STORAGE_BUCKET, VAT_RATE } from '../config.js';
-import { listCustomers, listLocations, listEquipment, listStaff, listProducts, getSettings } from '../db.js';
+import { listCustomers, listLocations, listEquipment, listStaff, listProducts, getSettings, listChecklistTemplates } from '../db.js';
 import { getProfile, isAdmin, role } from '../auth.js';
 import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
@@ -177,12 +177,13 @@ async function woForm(container) {
 async function renderDetail(container, id) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
-    const [woRes, partsRes, photosRes, commentsRes, timeRes, staff] = await Promise.all([
+    const [woRes, partsRes, photosRes, commentsRes, timeRes, checklistRes, staff] = await Promise.all([
       sb.from('work_orders').select('*, customers(id,name,kennitala), locations(name,address,access_notes), equipment(id,brand,model,serial_number), profiles:assigned_to(full_name)').eq('id', id).maybeSingle(),
       sb.from('work_order_parts').select('*, products(name)').eq('work_order_id', id).order('created_at'),
       sb.from('work_order_photos').select('*').eq('work_order_id', id).order('uploaded_at'),
       sb.from('work_order_comments').select('*, profiles:author_id(full_name)').eq('work_order_id', id).order('created_at'),
       sb.from('work_order_time_logs').select('*, profiles:technician_id(full_name)').eq('work_order_id', id),
+      sb.from('work_order_checklist_items').select('*, profiles:checked_by(full_name)').eq('work_order_id', id).order('position'),
       listStaff(),
     ]);
     if (woRes.error) throw woRes.error;
@@ -192,6 +193,7 @@ async function renderDetail(container, id) {
     const photos = photosRes.data || [];
     const comments = commentsRes.data || [];
     const timeLogs = timeRes.data || [];
+    const checklist = checklistRes.data || [];
     const reload = () => renderDetail(container, id);
 
     // --- Header ---
@@ -297,10 +299,11 @@ async function renderDetail(container, id) {
 
     const commentsSection = buildComments(wo.id, comments, reload);
     const timeSection = buildTimeCard(wo, timeLogs, reload);
+    const checklistSection = buildChecklist(wo, checklist, reload);
 
     mount(container, el('div', {}, [
       el('a', { href: '#/verkbeidnir', class: 'link-btn' }, '← Work orders'),
-      header, flow, timeSection, partsSection, photoSection, commentsSection, completeSection, invoiceSection,
+      header, flow, timeSection, checklistSection, partsSection, photoSection, commentsSection, completeSection, invoiceSection,
     ]));
   } catch (e) {
     console.error(e);
@@ -334,6 +337,73 @@ function buildComments(woId, comments, reload) {
     input,
     el('div', { class: 'row', style: { justifyContent: 'flex-end', marginTop: '8px' } }, post),
   ]);
+}
+
+// ---- Checklist ----
+function buildChecklist(wo, items, reload) {
+  const total = items.length;
+  const done = items.filter((i) => i.is_done).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  const toggle = async (item, checked) => {
+    const me = getProfile();
+    const patch = checked
+      ? { is_done: true, checked_by: me?.id || null, checked_at: new Date().toISOString() }
+      : { is_done: false, checked_by: null, checked_at: null };
+    const { error } = await sb.from('work_order_checklist_items').update(patch).eq('id', item.id);
+    if (error) toast(error.message, 'err'); else reload();
+  };
+
+  const rowEls = items.map((item) => {
+    const cb = el('input', { type: 'checkbox', checked: item.is_done, style: { width: 'auto' } });
+    cb.addEventListener('change', () => toggle(item, cb.checked));
+    return el('div', { class: 'row', style: { justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' } }, [
+      el('label', { class: 'row', style: { gap: '10px', flex: '1', cursor: 'pointer' } }, [
+        cb, el('span', item.is_done ? { style: { textDecoration: 'line-through', color: 'var(--muted)' } } : {}, item.label),
+      ]),
+      item.is_done && item.profiles?.full_name ? el('span', { class: 'muted', style: { fontSize: '11px', whiteSpace: 'nowrap' } }, item.profiles.full_name) : null,
+      btn('✕', async () => { await sb.from('work_order_checklist_items').delete().eq('id', item.id); reload(); }, { class: 'link-btn' }),
+    ]);
+  });
+
+  const newItem = el('input', { placeholder: 'Add item…' });
+  const addItem = async () => {
+    const label = newItem.value.trim(); if (!label) return;
+    const { error } = await sb.from('work_order_checklist_items').insert({ work_order_id: wo.id, label, position: items.length });
+    if (error) { toast(error.message, 'err'); return; }
+    reload();
+  };
+  newItem.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
+
+  return el('div', { class: 'card' }, [
+    el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '8px' } }, [
+      el('h3', { style: { margin: 0 } }, `Checklist${total ? ` · ${done}/${total}` : ''}`),
+      btn('Apply template', () => applyTemplate(wo, items.length, reload), { class: 'btn-ghost btn-sm' }),
+    ]),
+    total ? el('div', { class: `meter ${pct === 100 ? '' : 'warn'}` }, el('span', { style: { width: pct + '%' } })) : null,
+    total ? el('div', { style: { marginTop: '10px' } }, rowEls) : el('div', { class: 'muted' }, 'No checklist. Apply a template or add items below.'),
+    el('div', { class: 'row', style: { marginTop: '10px' } }, [newItem, btn('Add', addItem, { class: 'btn-ghost btn-sm' })]),
+  ]);
+}
+
+async function applyTemplate(wo, startPos, reload) {
+  let templates = [];
+  try { templates = await listChecklistTemplates(); } catch (e) { toast(e.message, 'err'); return; }
+  if (!templates.length) { toast('No templates yet — create them in Admin.', 'err'); return; }
+  const sel = el('select', {}, templates.map((t) => el('option', { value: t.id }, t.name + (t.wo_type ? ` (${WO_TYPE[t.wo_type] || t.wo_type})` : ''))));
+  const match = templates.find((t) => t.wo_type === wo.type); if (match) sel.value = match.id;
+  modal({
+    title: 'Apply checklist template',
+    saveLabel: 'Apply',
+    body: el('div', {}, fieldRow('Template', sel, true)),
+    onSave: async () => {
+      const t = templates.find((x) => x.id === sel.value);
+      if (!t) return false;
+      const rows = (t.items || []).map((label, i) => ({ work_order_id: wo.id, label, position: startPos + i }));
+      if (rows.length) { const { error } = await sb.from('work_order_checklist_items').insert(rows); if (error) { toast(error.message, 'err'); return false; } }
+      toast('Checklist applied.'); reload();
+    },
+  });
 }
 
 // ---- Time tracking (clock in / out) ----

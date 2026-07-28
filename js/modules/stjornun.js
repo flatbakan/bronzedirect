@@ -2,7 +2,9 @@
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { isAdmin, getProfile } from '../auth.js';
-import { modal, fieldRow, toast, errorView } from '../ui.js';
+import { listChecklistTemplates } from '../db.js';
+import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
+import { WO_TYPE } from '../fmt.js';
 
 const ROLES = { admin: 'Administrator', technician: 'Technician', office: 'Office' };
 
@@ -10,9 +12,10 @@ export async function render(container) {
   if (!isAdmin()) return errorView(container, 'Administrators only.');
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
-    const [staffRes, coRes] = await Promise.all([
+    const [staffRes, coRes, templates] = await Promise.all([
       sb.from('profiles').select('*').order('full_name'),
       sb.from('company_settings').select('*').eq('id', 1).maybeSingle(),
+      listChecklistTemplates({ activeOnly: false }).catch(() => []),
     ]);
     if (staffRes.error) throw staffRes.error;
     const staff = staffRes.data || [];
@@ -36,6 +39,8 @@ export async function render(container) {
         el('p', { class: 'muted', style: { fontSize: '13px' } }, 'New staff create an account on the sign-in page; here you manage their role and status.'),
         staffList,
       ]),
+
+      checklistCard(templates, reload),
 
       companyCard(co, reload),
     ]));
@@ -66,6 +71,58 @@ function staffForm(p, onDone) {
         is_active: active.checked,
         is_super_admin: superAdmin.checked,
       }).eq('id', p.id);
+      if (error) { toast(error.message, 'err'); return false; }
+      toast('Saved.'); onDone && onDone();
+    },
+  });
+}
+
+function checklistCard(templates, reload) {
+  const list = templates.length
+    ? el('div', {}, templates.map((t) => el('div', { class: 'list-item' }, [
+        el('div', { class: 'grow' }, [
+          el('div', { class: 'title' }, t.name + (t.is_active ? '' : ' (inactive)')),
+          el('div', { class: 'sub' }, [(t.wo_type ? (WO_TYPE[t.wo_type] || t.wo_type) : 'Any type'), `${(t.items || []).length} items`].join(' · ')),
+        ]),
+        btn('Edit', () => templateForm(t, reload), { class: 'btn-ghost btn-sm' }),
+        btn('✕', async () => {
+          if (!(await confirmDialog('Delete template?'))) return;
+          await sb.from('checklist_templates').delete().eq('id', t.id); reload();
+        }, { class: 'btn-ghost btn-sm' }),
+      ])))
+    : el('div', { class: 'muted' }, 'No checklist templates yet.');
+  return el('div', { class: 'card' }, [
+    el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '8px' } }, [
+      el('h3', { style: { margin: 0 } }, 'Checklist templates'),
+      btn('+ New template', () => templateForm(null, reload), { class: 'btn-ghost btn-sm' }),
+    ]),
+    el('p', { class: 'muted', style: { fontSize: '13px' } }, 'Reusable checklists technicians apply to work orders (e.g. installation steps).'),
+    list,
+  ]);
+}
+
+function templateForm(existing, onDone) {
+  const name = el('input', { value: existing?.name || '' });
+  const typeSel = el('select', {}, [el('option', { value: '' }, 'Any type'),
+    ...Object.entries(WO_TYPE).map(([v, l]) => el('option', { value: v, selected: existing?.wo_type === v }, l))]);
+  const items = el('textarea', { style: { minHeight: '150px' } }, (existing?.items || []).join('\n'));
+  const active = el('input', { type: 'checkbox', checked: existing ? existing.is_active : true });
+  modal({
+    title: existing ? 'Edit template' : 'New checklist template',
+    body: el('div', {}, [
+      fieldRow('Name *', name, true),
+      fieldRow('For work-order type', typeSel, true),
+      fieldRow('Items (one per line)', items, true),
+      el('div', { class: 'field' }, [el('label', {}, 'Active'), el('div', { class: 'row' }, [active, el('span', { class: 'muted' }, 'Available to apply')])]),
+    ]),
+    onSave: async () => {
+      if (!name.value.trim()) { toast('Name is required.', 'err'); return false; }
+      const arr = items.value.split('\n').map((s) => s.trim()).filter(Boolean);
+      const payload = { name: name.value.trim(), wo_type: typeSel.value || null, items: arr, is_active: active.checked };
+      const q = existing
+        ? sb.from('checklist_templates').update(payload).eq('id', existing.id)
+        : sb.from('checklist_templates').insert(payload);
+      const { error } = await q;
       if (error) { toast(error.message, 'err'); return false; }
       toast('Saved.'); onDone && onDone();
     },

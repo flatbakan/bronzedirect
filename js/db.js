@@ -38,6 +38,14 @@ export async function listProducts({ category, activeOnly = true } = {}) {
   return data || [];
 }
 
+export async function listChecklistTemplates({ activeOnly = true } = {}) {
+  let q = sb.from('checklist_templates').select('*').order('name');
+  if (activeOnly) q = q.eq('is_active', true);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
 export async function getSettings() {
   const { data, error } = await sb.from('company_settings').select('*').eq('id', 1).maybeSingle();
   if (error) throw error;
