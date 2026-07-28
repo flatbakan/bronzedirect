@@ -3,7 +3,7 @@ import { el, mount } from '../render.js';
 import { sb } from '../supabase.js';
 import { getProfile } from '../auth.js';
 import { getSettings } from '../db.js';
-import { WO_TYPE, WO_STATUS, fmtDateTime, fmtDate, isOverdue, isBulbDue } from '../fmt.js';
+import { WO_TYPE, WO_STATUS, WO_OPEN, fmtDateTime, fmtDate, isOverdue, isBulbDue } from '../fmt.js';
 import { errorView } from '../ui.js';
 
 function jobIsOverdue(w) {
@@ -31,7 +31,7 @@ export async function render(container) {
 
   try {
     const sel = '*, customers(name)';
-    const openStatuses = ['new', 'scheduled', 'in_progress'];
+    const openStatuses = WO_OPEN;
 
     const [openRes, mineRes, equipRes, settings] = await Promise.all([
       sb.from('work_orders').select(sel).in('status', openStatuses).order('scheduled_at', { nullsFirst: false }),
@@ -51,7 +51,7 @@ export async function render(container) {
     const stats = el('div', { class: 'stat-grid' }, [
       stat(open.length, 'Open jobs'),
       stat(overdue.length, 'Overdue'),
-      stat(byStatus('in_progress'), 'In progress'),
+      stat(byStatus('on_site'), 'On site'),
       stat(bulbsDue.length, 'Bulbs due'),
     ]);
 

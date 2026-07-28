@@ -6,9 +6,24 @@ export const WO_TYPE = {
   maintenance: 'Maintenance', inspection: 'Inspection', other: 'Other',
 };
 export const WO_STATUS = {
-  new: 'New', scheduled: 'Scheduled', in_progress: 'In progress',
-  done: 'Done', invoiced: 'Invoiced', cancelled: 'Cancelled',
+  new: 'New', assigned: 'Assigned', accepted: 'Accepted', travelling: 'Travelling',
+  on_site: 'On site', paused: 'Paused', waiting_parts: 'Waiting parts',
+  completed: 'Completed', invoiced: 'Invoiced', cancelled: 'Cancelled',
 };
+// Active/open statuses (not finished)
+export const WO_OPEN = ['new', 'assigned', 'accepted', 'travelling', 'on_site', 'paused', 'waiting_parts'];
+export const WO_CLOSED = ['completed', 'invoiced', 'cancelled'];
+
+// Duration between two timestamps as "2h 15m"
+export function fmtDuration(ms) {
+  if (!ms || ms < 0) return '0m';
+  const mins = Math.round(ms / 60000);
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return (h ? h + 'h ' : '') + m + 'm';
+}
+export function hoursFromMs(ms) {
+  return Math.round((ms / 3600000) * 100) / 100;
+}
 export const WO_PRIORITY = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
 export const PRODUCT_CAT = { bed: 'Sunbed', bulb: 'Bulb / tube', part: 'Spare part', accessory: 'Accessory' };
 export const EQUIP_STATUS = { in_service: 'In service', needs_service: 'Needs service', removed: 'Removed' };

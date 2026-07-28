@@ -8,7 +8,7 @@ import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
 import {
-  EQUIP_STATUS, WO_TYPE, WO_STATUS, fmtDate, fmtDateTime, todayISO,
+  EQUIP_STATUS, WO_TYPE, WO_STATUS, WO_OPEN, fmtDate, fmtDateTime, todayISO,
   money, bulbLife, bulbPct, isBulbDue,
 } from '../fmt.js';
 
@@ -235,7 +235,7 @@ async function renderDetail(container, id) {
 // ---- Overview tab ----
 async function tabOverview(asset, settings, content) {
   const { count: openCount } = await sb.from('work_orders').select('id', { count: 'exact', head: true })
-    .eq('equipment_id', asset.id).in('status', ['new', 'scheduled', 'in_progress']);
+    .eq('equipment_id', asset.id).in('status', WO_OPEN);
   const { data: lastWo } = await sb.from('work_orders').select('created_at, type')
     .eq('equipment_id', asset.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
 

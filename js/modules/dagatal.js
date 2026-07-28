@@ -2,7 +2,7 @@
 import { el, mount, btn } from '../render.js';
 import { sb } from '../supabase.js';
 import { listStaff } from '../db.js';
-import { WO_TYPE, WO_STATUS } from '../fmt.js';
+import { WO_TYPE, WO_STATUS, WO_OPEN } from '../fmt.js';
 import { errorView } from '../ui.js';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -42,9 +42,9 @@ export async function render(container) {
     const sel = '*, customers(name), profiles:assigned_to(full_name)';
     let scheduledQ = sb.from('work_orders').select(sel)
       .gte('scheduled_at', weekStart.toISOString()).lt('scheduled_at', weekEnd.toISOString())
-      .not('status', 'in', '(cancelled,invoiced)');
+      .not('status', 'in', '(cancelled,invoiced,completed)');
     let unscheduledQ = sb.from('work_orders').select(sel)
-      .is('scheduled_at', null).in('status', ['new', 'scheduled', 'in_progress']);
+      .is('scheduled_at', null).in('status', WO_OPEN);
     if (techFilter) { scheduledQ = scheduledQ.eq('assigned_to', techFilter); unscheduledQ = unscheduledQ.eq('assigned_to', techFilter); }
 
     const [schedRes, unschedRes] = await Promise.all([scheduledQ, unscheduledQ]);

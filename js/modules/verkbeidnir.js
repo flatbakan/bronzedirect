@@ -8,7 +8,8 @@ import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
 import {
-  WO_TYPE, WO_STATUS, WO_PRIORITY, fmtDate, fmtDateTime, money, toLocalInput, isOverdue,
+  WO_TYPE, WO_STATUS, WO_PRIORITY, WO_OPEN, WO_CLOSED,
+  fmtDate, fmtDateTime, money, toLocalInput, isOverdue, fmtDuration, hoursFromMs,
 } from '../fmt.js';
 import { signaturePad } from './signature.js';
 
@@ -20,7 +21,7 @@ export async function render(container, param) {
 
 // Open job past its due date
 function woOverdue(w) {
-  if (['done', 'invoiced', 'cancelled'].includes(w.status)) return false;
+  if (WO_CLOSED.includes(w.status)) return false;
   return isOverdue(w.due_date);
 }
 
@@ -43,7 +44,7 @@ async function renderList(container) {
     let q = sb.from('work_orders').select('*, customers(name), profiles:assigned_to(full_name)')
       .order('created_at', { ascending: false });
     const s = statusSel.value;
-    if (s === 'open') q = q.in('status', ['new', 'scheduled', 'in_progress']);
+    if (s === 'open') q = q.in('status', WO_OPEN);
     else if (s !== 'all') q = q.eq('status', s);
     const { data, error } = await q;
     if (error) { mount(listWrap, el('div', { class: 'empty' }, error.message)); return; }
@@ -118,6 +119,7 @@ async function woForm(container) {
     priority: el('select', {}, Object.entries(WO_PRIORITY).map(([v, l]) => el('option', { value: v, selected: v === 'normal' }, l))),
     scheduled: el('input', { type: 'datetime-local' }),
     due: el('input', { type: 'date' }),
+    estimated: el('input', { type: 'number', step: '0.25' }),
     assigned: el('select', {}, [el('option', { value: '' }, '— Unassigned —'),
       ...staff.map((s) => el('option', { value: s.id }, s.full_name || s.email))]),
     title: el('input', {}),
@@ -128,7 +130,7 @@ async function woForm(container) {
     if (!custSel.value) { toast('Select a customer.', 'err'); return; }
     save.disabled = true;
     const me = getProfile();
-    const status = f.scheduled.value ? 'scheduled' : 'new';
+    const status = (f.assigned.value || f.scheduled.value) ? 'assigned' : 'new';
     const payload = {
       customer_id: custSel.value,
       location_id: locSel.value || null,
@@ -138,6 +140,7 @@ async function woForm(container) {
       status,
       scheduled_at: f.scheduled.value ? new Date(f.scheduled.value).toISOString() : null,
       due_date: f.due.value || null,
+      estimated_hours: f.estimated.value ? Number(f.estimated.value) : null,
       assigned_to: f.assigned.value || null,
       title: f.title.value.trim() || null,
       description: f.description.value.trim() || null,
@@ -161,6 +164,7 @@ async function woForm(container) {
       fieldRow('Priority', f.priority),
       fieldRow('Scheduled time', f.scheduled),
       fieldRow('Due date', f.due),
+      fieldRow('Estimated hours', f.estimated),
       fieldRow('Assign to', f.assigned),
       fieldRow('Title', f.title, true),
       fieldRow('Description', f.description, true),
@@ -173,11 +177,12 @@ async function woForm(container) {
 async function renderDetail(container, id) {
   mount(container, el('div', { class: 'empty' }, 'Loading…'));
   try {
-    const [woRes, partsRes, photosRes, commentsRes, staff] = await Promise.all([
+    const [woRes, partsRes, photosRes, commentsRes, timeRes, staff] = await Promise.all([
       sb.from('work_orders').select('*, customers(id,name,kennitala), locations(name,address,access_notes), equipment(id,brand,model,serial_number), profiles:assigned_to(full_name)').eq('id', id).maybeSingle(),
       sb.from('work_order_parts').select('*, products(name)').eq('work_order_id', id).order('created_at'),
       sb.from('work_order_photos').select('*').eq('work_order_id', id).order('uploaded_at'),
       sb.from('work_order_comments').select('*, profiles:author_id(full_name)').eq('work_order_id', id).order('created_at'),
+      sb.from('work_order_time_logs').select('*, profiles:technician_id(full_name)').eq('work_order_id', id),
       listStaff(),
     ]);
     if (woRes.error) throw woRes.error;
@@ -186,6 +191,7 @@ async function renderDetail(container, id) {
     const parts = partsRes.data || [];
     const photos = photosRes.data || [];
     const comments = commentsRes.data || [];
+    const timeLogs = timeRes.data || [];
     const reload = () => renderDetail(container, id);
 
     // --- Header ---
@@ -207,6 +213,7 @@ async function renderDetail(container, id) {
         ['Equipment', wo.equipment && [wo.equipment.brand, wo.equipment.model].filter(Boolean).join(' ')],
         ['Scheduled', fmtDateTime(wo.scheduled_at)],
         ['Due date', fmtDate(wo.due_date)],
+        ['Est. hours', wo.estimated_hours],
         ['Assigned', wo.profiles?.full_name],
         ['Created', fmtDate(wo.created_at)],
         ['Labour hours', wo.labor_hours],
@@ -268,7 +275,7 @@ async function renderDetail(container, id) {
     ]);
 
     // --- Complete job ---
-    const completeSection = (wo.status !== 'done' && wo.status !== 'invoiced' && wo.status !== 'cancelled')
+    const completeSection = (!WO_CLOSED.includes(wo.status))
       ? el('div', { class: 'card' }, [
           el('h3', { style: { marginTop: 0 } }, 'Complete job'),
           btn('Record resolution & signature', () => completeWo(wo, reload), { class: 'btn-primary' }),
@@ -289,10 +296,11 @@ async function renderDetail(container, id) {
       : null;
 
     const commentsSection = buildComments(wo.id, comments, reload);
+    const timeSection = buildTimeCard(wo, timeLogs, reload);
 
     mount(container, el('div', {}, [
       el('a', { href: '#/verkbeidnir', class: 'link-btn' }, '← Work orders'),
-      header, flow, partsSection, photoSection, commentsSection, completeSection, invoiceSection,
+      header, flow, timeSection, partsSection, photoSection, commentsSection, completeSection, invoiceSection,
     ]));
   } catch (e) {
     console.error(e);
@@ -325,6 +333,60 @@ function buildComments(woId, comments, reload) {
     ]))) : el('div', { class: 'muted', style: { marginBottom: '12px' } }, 'No comments yet.'),
     input,
     el('div', { class: 'row', style: { justifyContent: 'flex-end', marginTop: '8px' } }, post),
+  ]);
+}
+
+// ---- Time tracking (clock in / out) ----
+function buildTimeCard(wo, logs, reload) {
+  const me = getProfile();
+  const dur = (l) => (l.clock_out ? new Date(l.clock_out) : new Date()).getTime() - new Date(l.clock_in).getTime();
+  const totalMs = logs.reduce((s, l) => s + dur(l), 0);
+  const trackedH = hoursFromMs(totalMs);
+  const myOpen = logs.find((l) => !l.clock_out && l.technician_id === me?.id);
+
+  const clockBtn = myOpen
+    ? btn('■ Clock out', async () => {
+        const { error } = await sb.from('work_order_time_logs').update({ clock_out: new Date().toISOString() }).eq('id', myOpen.id);
+        if (error) { toast(error.message, 'err'); return; }
+        toast('Clocked out.'); reload();
+      }, { class: 'btn-primary btn-sm' })
+    : btn('▶ Clock in', async () => {
+        const patch = { work_order_id: wo.id, technician_id: me?.id || null };
+        const { error } = await sb.from('work_order_time_logs').insert(patch);
+        if (error) { toast(error.message, 'err'); return; }
+        // moving to work → mark on site if still en route
+        if (['new', 'assigned', 'accepted', 'travelling'].includes(wo.status)) {
+          await sb.from('work_orders').update({ status: 'on_site' }).eq('id', wo.id);
+        }
+        toast('Clocked in.'); reload();
+      }, { class: 'btn-primary btn-sm' });
+
+  const rows = logs.slice().sort((a, b) => new Date(b.clock_in) - new Date(a.clock_in)).map((l) =>
+    el('div', { class: 'list-item' }, [
+      el('div', { class: 'grow' }, [
+        el('div', { class: 'title' }, l.profiles?.full_name || 'Technician'),
+        el('div', { class: 'sub' }, fmtDateTime(l.clock_in) + ' → ' + (l.clock_out ? fmtDateTime(l.clock_out) : 'now')),
+      ]),
+      el('span', { class: `badge ${l.clock_out ? 'completed' : 'on_site'}` }, (l.clock_out ? '' : 'active · ') + fmtDuration(dur(l))),
+    ]));
+
+  const useBtn = trackedH > 0 ? btn(`Use ${trackedH}h as labour`, async () => {
+    const { error } = await sb.from('work_orders').update({ labor_hours: trackedH }).eq('id', wo.id);
+    if (error) { toast(error.message, 'err'); return; }
+    toast('Labour hours set to ' + trackedH + 'h.'); reload();
+  }, { class: 'btn-ghost btn-sm' }) : null;
+
+  return el('div', { class: 'card' }, [
+    el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
+      el('h3', { style: { margin: 0 } }, 'Time tracking'),
+      clockBtn,
+    ]),
+    el('div', { class: 'row', style: { justifyContent: 'space-between' } }, [
+      el('span', { class: 'muted' }, 'Total tracked'),
+      el('strong', {}, fmtDuration(totalMs) + (trackedH ? ` · ${trackedH}h` : '')),
+    ]),
+    useBtn ? el('div', { class: 'row', style: { marginTop: '8px' } }, useBtn) : null,
+    rows.length ? el('div', { style: { marginTop: '10px' } }, rows) : el('div', { class: 'muted', style: { marginTop: '8px' } }, 'No time logged yet.'),
   ]);
 }
 
@@ -364,23 +426,31 @@ function printJobSheet(wo, parts) {
   setTimeout(() => w.print(), 300);
 }
 
-// ---- Status buttons ----
+// ---- Status buttons (technician workflow) ----
 function statusButtons(wo, reload) {
-  const set = async (status, extra = {}) => {
+  const set = (status, extra = {}) => async () => {
     const payload = { status, ...extra };
-    if (status === 'done') payload.completed_at = new Date().toISOString();
+    if (status === 'completed' && !wo.completed_at) payload.completed_at = new Date().toISOString();
     const { error } = await sb.from('work_orders').update(payload).eq('id', wo.id);
     if (error) { toast(error.message, 'err'); return; }
     reload();
   };
+  const S = wo.status;
   const out = [];
-  if (wo.status === 'new') out.push(btn('Schedule', () => set('scheduled'), { class: 'btn-ghost btn-sm' }));
-  if (wo.status === 'new' || wo.status === 'scheduled') out.push(btn('Start work', () => set('in_progress'), { class: 'btn-primary btn-sm' }));
-  if (wo.status === 'in_progress' || wo.status === 'scheduled') out.push(btn('Mark done', () => set('done'), { class: 'btn-primary btn-sm' }));
-  if (wo.status !== 'cancelled' && wo.status !== 'invoiced') {
+  if (S === 'new') out.push(btn('Mark assigned', set('assigned'), { class: 'btn-primary btn-sm' }));
+  if (S === 'assigned') out.push(btn('Accept', set('accepted'), { class: 'btn-primary btn-sm' }));
+  if (S === 'accepted') out.push(btn('Start travel', set('travelling'), { class: 'btn-primary btn-sm' }));
+  if (S === 'travelling') out.push(btn('Arrived on site', set('on_site'), { class: 'btn-primary btn-sm' }));
+  if (S === 'on_site') {
+    out.push(btn('Pause', set('paused'), { class: 'btn-ghost btn-sm' }));
+    out.push(btn('Waiting for parts', set('waiting_parts'), { class: 'btn-ghost btn-sm' }));
+  }
+  if (S === 'paused' || S === 'waiting_parts') out.push(btn('Resume (on site)', set('on_site'), { class: 'btn-primary btn-sm' }));
+  if (['new', 'assigned', 'accepted', 'travelling'].includes(S)) out.push(btn('Skip to on site', set('on_site'), { class: 'btn-ghost btn-sm' }));
+  if (!WO_CLOSED.includes(S)) {
     out.push(btn('Cancel', async () => {
       if (!(await confirmDialog('Cancel this work order?'))) return;
-      set('cancelled');
+      await set('cancelled')();
     }, { class: 'btn-ghost btn-sm' }));
   }
   if (!out.length) out.push(el('span', { class: 'muted' }, 'No actions available.'));
@@ -394,6 +464,7 @@ async function editWo(wo, staff, reload) {
     priority: el('select', {}, Object.entries(WO_PRIORITY).map(([v, l]) => el('option', { value: v, selected: v === wo.priority }, l))),
     scheduled: el('input', { type: 'datetime-local', value: wo.scheduled_at ? toLocalInput(wo.scheduled_at) : '' }),
     due: el('input', { type: 'date', value: wo.due_date || '' }),
+    estimated: el('input', { type: 'number', step: '0.25', value: wo.estimated_hours ?? '' }),
     assigned: el('select', {}, [el('option', { value: '' }, '— Unassigned —'),
       ...staff.map((s) => el('option', { value: s.id, selected: s.id === wo.assigned_to }, s.full_name || s.email))]),
     title: el('input', { value: wo.title || '' }),
@@ -406,6 +477,7 @@ async function editWo(wo, staff, reload) {
       fieldRow('Priority', f.priority),
       fieldRow('Scheduled time', f.scheduled),
       fieldRow('Due date', f.due),
+      fieldRow('Estimated hours', f.estimated),
       fieldRow('Assign to', f.assigned),
       fieldRow('Title', f.title, true),
       fieldRow('Description', f.description, true),
@@ -416,6 +488,7 @@ async function editWo(wo, staff, reload) {
         priority: f.priority.value,
         scheduled_at: f.scheduled.value ? new Date(f.scheduled.value).toISOString() : null,
         due_date: f.due.value || null,
+        estimated_hours: f.estimated.value ? Number(f.estimated.value) : null,
         assigned_to: f.assigned.value || null,
         title: f.title.value.trim() || null,
         description: f.description.value.trim() || null,
@@ -483,7 +556,7 @@ function completeWo(wo, reload) {
     body,
     onSave: async () => {
       const update = {
-        status: 'done',
+        status: 'completed',
         resolution: resolution.value.trim() || null,
         labor_hours: hours.value ? Number(hours.value) : null,
         signed_name: signedName.value.trim() || null,
