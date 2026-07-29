@@ -219,7 +219,7 @@ async function renderDetail(container, id) {
   // Tabs
   const TABS = [
     ['overview', 'Overview'], ['history', 'History'], ['workorders', 'Work orders'],
-    ['photos', 'Photos'], ['documents', 'Documents'], ['maintenance', 'Maintenance'], ['parts', 'Parts'],
+    ['photos', 'Photos'], ['documents', 'Documents'], ['reports', 'Report'], ['maintenance', 'Maintenance'], ['parts', 'Parts'],
   ];
   const content = el('div', {});
   const tabBar = el('div', { class: 'tabs' });
@@ -229,6 +229,7 @@ async function renderDetail(container, id) {
     workorders: () => tabWorkOrders(asset, content),
     photos: () => tabPhotos(asset, content),
     documents: () => tabDocuments(asset, content),
+    reports: () => tabReports(asset, content),
     maintenance: () => tabMaintenance(asset, settings, content),
     parts: () => tabParts(asset, content),
   };
@@ -417,6 +418,26 @@ function docForm(asset, done) {
       } catch (e) { toast('Upload failed: ' + e.message, 'err'); return false; }
     },
   });
+}
+
+// ---- Installation reports tab ----
+async function tabReports(asset, content) {
+  const { data } = await sb.from('installation_reports').select('id,status,created_at,technician_signed_at')
+    .eq('equipment_id', asset.id).order('created_at', { ascending: false });
+  const rows = data || [];
+  mount(content, el('div', {}, [
+    el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
+      el('div', { class: 'muted', style: { fontSize: '13px' } }, 'KBL Installation Report (FOR0901-06)'),
+      btn('+ New installation report', () => { prefill.set({ equipmentId: asset.id }); navigate('/report/new'); }, { class: 'btn-primary btn-sm' }),
+    ]),
+    rows.length ? el('div', {}, rows.map((r) => el('a', { class: 'list-item', href: `#/report/${r.id}` }, [
+      el('div', { class: 'grow' }, [
+        el('div', { class: 'title' }, 'Installation report'),
+        el('div', { class: 'sub' }, fmtDate(r.created_at)),
+      ]),
+      el('span', { class: `badge ${r.status === 'completed' ? 'completed' : 'assigned'}` }, r.status === 'completed' ? 'Completed' : 'Draft'),
+    ]))) : el('div', { class: 'empty' }, 'No installation reports yet.'),
+  ]));
 }
 
 // ---- Maintenance tab ----

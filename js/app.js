@@ -52,6 +52,7 @@ const MODULES = {
   '/verkbeidnir':    () => import('./modules/verkbeidnir.js'),
   '/vidskiptavinir': () => import('./modules/vidskiptavinir.js'),
   '/taeki':          () => import('./modules/taeki.js'),
+  '/report':         () => import('./modules/install-report.js'),
   '/scan':           () => import('./modules/scan.js'),
   '/tilkynningar':   () => import('./modules/tilkynningar.js'),
   '/vorur':          () => import('./modules/vorur.js'),
