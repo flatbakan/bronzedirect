@@ -38,6 +38,8 @@ export function hoursFromMs(ms) {
 export const WO_PRIORITY = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
 export const PRODUCT_CAT = { bed: 'Sunbed', bulb: 'Bulb / tube', part: 'Spare part', accessory: 'Accessory' };
 export const EQUIP_STATUS = { in_service: 'In service', needs_service: 'Needs service', removed: 'Removed' };
+export const ASSET_CATEGORY = { sunbed: 'Sunbed', spray_booth: 'Spray tan booth', other: 'Other' };
+export const isSunbed = (asset) => !asset?.category || asset.category === 'sunbed';
 
 export function fmtDate(v) {
   if (!v) return '';

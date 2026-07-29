@@ -3,13 +3,13 @@
 :root {
   --plum:       #531E52;
   --magenta:    #B24C96;
-  --ink:        #150A15;
-  --ink-raised: #1F0F1E;
-  --panel:      #281426;   /* inputs / secondary surface */
+  --ink:        #241729;   /* page base — lifted from pure-dark for long work sessions */
+  --ink-raised: #2E1F34;   /* cards, panels */
+  --panel:      #3A2941;   /* inputs / secondary surface */
   --cream:      #F4EBF2;
-  --muted:      #9C7C97;
-  --faint:      #5C455A;
-  --line:       #332032;
+  --muted:      #B49CB0;
+  --faint:      #806780;
+  --line:       #46334D;
 
   /* semantic aliases used across modules */
   --bg:         var(--ink);
@@ -28,7 +28,7 @@
   --info:    #7fa8e8;
 
   --grad: linear-gradient(90deg, var(--plum), var(--magenta));
-  --bg-radial: radial-gradient(120% 75% at 50% 0%, #2E1330 0%, var(--ink) 58%, #0B050B 100%);
+  --bg-radial: radial-gradient(120% 75% at 50% 0%, #3A2340 0%, #241729 55%, #1B1220 100%);
 
   --radius:    10px;   /* cards */
   --radius-sm: 4px;    /* inputs, buttons */
@@ -110,7 +110,7 @@ button:disabled { opacity: .5; cursor: default; }
 /* ---------- App layout ---------- */
 .layout { display: flex; min-height: 100dvh; }
 .sidebar {
-  width: 236px; flex-shrink: 0; background: rgba(21,10,21,.85); backdrop-filter: blur(6px);
+  width: 236px; flex-shrink: 0; background: rgba(31,20,37,.9); backdrop-filter: blur(6px);
   border-right: 1px solid var(--line); display: flex; flex-direction: column;
   position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); transition: transform var(--ease);
 }
@@ -130,7 +130,7 @@ button:disabled { opacity: .5; cursor: default; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar {
   display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-  border-bottom: 1px solid var(--line); background: rgba(21,10,21,.85); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line); background: rgba(31,20,37,.9); backdrop-filter: blur(6px);
   position: sticky; top: 0; z-index: 30;
 }
 .topbar h1 { font-size: 16px; margin: 0; font-weight: 600; }

@@ -12,8 +12,8 @@ import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
 import { navigate } from '../router.js';
 import { prefill } from '../state.js';
 import {
-  EQUIP_STATUS, WO_TYPE, WO_STATUS, WO_OPEN, WO_PRIORITY, fmtDate, fmtDateTime, todayISO,
-  money, bulbLife, bulbPct, isBulbDue, isOverdue,
+  EQUIP_STATUS, ASSET_CATEGORY, isSunbed, WO_TYPE, WO_STATUS, WO_OPEN, WO_PRIORITY,
+  fmtDate, fmtDateTime, todayISO, money, bulbLife, bulbPct, isBulbDue, isOverdue,
 } from '../fmt.js';
 
 const assetName = (e) => e.name || [e.brand, e.model].filter(Boolean).join(' ') || 'Asset';
@@ -88,6 +88,7 @@ async function equipForm(container, existing) {
   await loadLocs(custSel.value, existing?.location_id);
 
   const f = {
+    category: el('select', {}, Object.entries(ASSET_CATEGORY).map(([v, l]) => el('option', { value: v, selected: (existing?.category || 'sunbed') === v }, l))),
     name: el('input', { value: existing?.name || '' }),
     type: el('input', { value: existing?.type || '' }),
     brand: el('input', { value: existing?.brand || '' }),
@@ -104,24 +105,32 @@ async function equipForm(container, existing) {
     notes: el('textarea', {}, existing?.notes || ''),
   };
 
+  const bulbRows = [
+    fieldRow('Bulb type', f.bulbType),
+    fieldRow('Body bulbs', f.bulbCount),
+    fieldRow('Facial bulbs', f.facial),
+    fieldRow('Current bulb hours', f.hours),
+    fieldRow('Bulb life (hrs, blank = default)', f.life),
+  ];
+  const toggleBulbs = () => { const show = f.category.value === 'sunbed'; bulbRows.forEach((r) => { r.style.display = show ? '' : 'none'; }); };
+  f.category.addEventListener('change', toggleBulbs);
+
   const form = el('div', { class: 'form-grid' }, [
     fieldRow('Customer *', custSel, true),
     fieldRow('Location', locSel, true),
+    fieldRow('Category', f.category),
     fieldRow('Name', f.name),
-    fieldRow('Type (e.g. Sunbed, Spare)', f.type),
+    fieldRow('Type / sub-type', f.type),
     fieldRow('Manufacturer', f.brand),
     fieldRow('Model', f.model),
     fieldRow('Serial number', f.serial),
     fieldRow('Installed', f.install),
     fieldRow('Warranty until', f.warranty),
     fieldRow('Status', f.status),
-    fieldRow('Bulb type', f.bulbType),
-    fieldRow('Body bulbs', f.bulbCount),
-    fieldRow('Facial bulbs', f.facial),
-    fieldRow('Current bulb hours', f.hours),
-    fieldRow('Bulb life (hrs, blank = default)', f.life),
+    ...bulbRows,
     fieldRow('Notes', f.notes, true),
   ]);
+  toggleBulbs();
 
   const save = btn(existing ? 'Save changes' : 'Create asset', async () => {
     if (!custSel.value) { toast('Select a customer.', 'err'); return; }
@@ -129,6 +138,7 @@ async function equipForm(container, existing) {
     const payload = {
       customer_id: custSel.value,
       location_id: locSel.value || null,
+      category: f.category.value,
       name: f.name.value.trim() || null,
       type: f.type.value.trim() || null,
       brand: f.brand.value.trim() || null,
@@ -189,7 +199,7 @@ async function renderDetail(container, id) {
         ].filter(Boolean).join(' ')),
       ]),
       el('div', { class: 'row' }, [
-        isBulbDue(asset, settings) ? el('span', { class: 'badge urgent' }, '💡 Bulbs due') : null,
+        isSunbed(asset) && isBulbDue(asset, settings) ? el('span', { class: 'badge urgent' }, '💡 Bulbs due') : null,
         statusBadge,
       ]),
     ]),
@@ -250,6 +260,7 @@ async function tabOverview(asset, settings, content) {
     ]),
     el('div', { class: 'card' }, [
       infoGrid([
+        ['Category', ASSET_CATEGORY[asset.category] || 'Sunbed'],
         ['Asset #', asset.asset_no && ('A' + asset.asset_no)],
         ['Type', asset.type],
         ['Serial number', asset.serial_number],
@@ -259,11 +270,9 @@ async function tabOverview(asset, settings, content) {
         ['Status', EQUIP_STATUS[asset.status]],
         ['Installed', fmtDate(asset.install_date)],
         ['Warranty until', fmtDate(asset.warranty_until)],
-        ['Bulb type', asset.bulb_type],
-        ['Body bulbs', asset.bulb_count],
-        ['Facial bulbs', asset.facial_bulb_count],
+        ...(isSunbed(asset) ? [['Bulb type', asset.bulb_type], ['Body bulbs', asset.bulb_count], ['Facial bulbs', asset.facial_bulb_count]] : []),
       ]),
-      bulbMeter(asset, settings),
+      isSunbed(asset) ? bulbMeter(asset, settings) : null,
       asset.notes ? el('p', {}, asset.notes) : null,
     ]),
   ]));
@@ -456,11 +465,11 @@ async function tabMaintenance(asset, settings, content) {
       ]),
       planList,
     ]),
-    el('div', { class: 'card' }, [
+    isSunbed(asset) ? el('div', { class: 'card' }, [
       el('h3', { style: { marginTop: 0 } }, 'Bulb life'),
       bulbMeter(asset, settings) || el('div', { class: 'muted' }, 'No bulb-life data. Set current hours and life on the asset.'),
       el('div', { style: { marginTop: '10px' } }, btn('+ Log bulb change', () => bulbChangeForm(asset, rerender), { class: 'btn-ghost btn-sm' })),
-    ]),
+    ]) : null,
     el('div', { class: 'card' }, [
       el('h3', { style: { marginTop: 0 } }, 'Maintenance & inspection history'),
       rows.length ? el('div', {}, rows.map((w) => el('a', { class: 'list-item', href: `#/verkbeidnir/${w.id}` }, [
