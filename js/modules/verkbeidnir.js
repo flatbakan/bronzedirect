@@ -241,7 +241,8 @@ async function renderDetail(container, id) {
     // --- Workflow (status) ---
     const flow = el('div', { class: 'card' }, [
       el('h3', { style: { marginTop: 0 } }, 'Job status'),
-      el('div', { class: 'row' }, statusButtons(wo, reload)),
+      statusStepper(wo),
+      el('div', { class: 'row', style: { marginTop: '14px' } }, statusButtons(wo, reload)),
     ]);
 
     // --- Parts / bulbs ---
@@ -494,6 +495,25 @@ function printJobSheet(wo, parts) {
   w.document.close();
   w.focus();
   setTimeout(() => w.print(), 300);
+}
+
+// ---- Status stepper (visual lifecycle) ----
+function statusStepper(wo) {
+  const stages = ['new', 'assigned', 'accepted', 'travelling', 'on_site', 'completed'];
+  if (wo.status === 'cancelled') {
+    return el('div', { class: 'row', style: { padding: '6px 0' } }, el('span', { class: 'badge cancelled' }, 'Cancelled'));
+  }
+  let cur = stages.indexOf(wo.status);
+  if (wo.status === 'paused' || wo.status === 'waiting_parts') cur = stages.indexOf('on_site');
+  if (wo.status === 'invoiced') cur = stages.length - 1;
+  const wrap = el('div', { class: 'stepper' }, stages.map((s, i) => {
+    const state = i < cur ? 'done' : i === cur ? 'current' : 'todo';
+    return el('div', { class: `step ${state}` }, [el('span', { class: 'step-dot' }), el('span', { class: 'step-label' }, WO_STATUS[s])]);
+  }));
+  const flag = (wo.status === 'paused' || wo.status === 'waiting_parts')
+    ? el('div', { style: { marginTop: '8px' } }, el('span', { class: `badge ${wo.status}` }, WO_STATUS[wo.status]))
+    : (wo.status === 'invoiced' ? el('div', { style: { marginTop: '8px' } }, el('span', { class: 'badge invoiced' }, 'Invoiced')) : null);
+  return el('div', {}, [wrap, flag]);
 }
 
 // ---- Status buttons (technician workflow) ----

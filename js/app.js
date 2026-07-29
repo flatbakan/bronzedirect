@@ -5,6 +5,7 @@ import { sb } from './supabase.js';
 import * as auth from './auth.js';
 import { route, setNotFound, startRouter, navigate, currentPath } from './router.js';
 import { setCurrency } from './fmt.js';
+import { makeSearchBox } from './search-box.js';
 import { toast } from './ui.js';
 
 const appRoot = document.getElementById('app');
@@ -33,6 +34,14 @@ const NAV = [
   { path: '/reikningar',    label: 'Invoices',     ico: '🧾', roles: ['admin','office'] },
   { sep: 'Admin', roles: ['admin'] },
   { path: '/stjornun',      label: 'Admin',        ico: '⚙️', roles: ['admin'] },
+];
+
+// Mobile bottom bar — the technician's core destinations.
+const BOTTOM_NAV = [
+  { path: '/idag',        label: 'Today',    ico: '📅' },
+  { path: '/dagatal',     label: 'Schedule', ico: '🗓️' },
+  { path: '/scan',        label: 'Scan',     ico: '📷' },
+  { path: '/verkbeidnir', label: 'Jobs',     ico: '🧰' },
 ];
 
 // Module files (lazy import). Contract: render(container, param).
@@ -161,12 +170,16 @@ function renderShell() {
   const topbar = el('header', { class: 'topbar' }, [
     btn('☰', toggleSidebar, { class: 'hamburger' }),
     titleEl,
+    makeSearchBox(),
   ]);
+
+  const bottomNav = el('nav', { class: 'bottomnav' }, BOTTOM_NAV.map((item) =>
+    el('a', { href: '#' + item.path, dataset: { path: item.path } }, [el('span', { class: 'ico' }, item.ico), item.label])));
 
   mount(appRoot, el('div', { class: 'layout' }, [
     sidebarEl,
     scrimEl,
-    el('main', { class: 'main' }, [topbar, viewEl]),
+    el('main', { class: 'main' }, [topbar, viewEl, bottomNav]),
   ]));
   appRoot.setAttribute('aria-busy', 'false');
 }
@@ -175,7 +188,7 @@ function toggleSidebar() { sidebarEl.classList.toggle('open'); scrimEl.classList
 function closeSidebar() { sidebarEl.classList.remove('open'); scrimEl.classList.remove('show'); }
 
 function setActiveNav(path) {
-  sidebarEl.querySelectorAll('.nav a').forEach((a) => {
+  document.querySelectorAll('.nav a[data-path], .bottomnav a[data-path]').forEach((a) => {
     a.classList.toggle('active', a.dataset.path === path);
   });
 }
