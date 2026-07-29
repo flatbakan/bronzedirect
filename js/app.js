@@ -4,6 +4,7 @@ import { APP_NAME } from './config.js';
 import { sb } from './supabase.js';
 import * as auth from './auth.js';
 import { route, setNotFound, startRouter, navigate, currentPath } from './router.js';
+import { setCurrency } from './fmt.js';
 import { toast } from './ui.js';
 
 const appRoot = document.getElementById('app');
@@ -240,6 +241,10 @@ async function boot() {
     toast('Account is inactive.', 'err');
     return;
   }
+  try {
+    const { data: cs } = await sb.from('company_settings').select('currency').eq('id', 1).maybeSingle();
+    if (cs?.currency) setCurrency(cs.currency);
+  } catch { /* currency column may not exist yet */ }
   renderShell();
   registerRoutes();
   startRouter(); // reads current hash; empty/ / falls back to /idag

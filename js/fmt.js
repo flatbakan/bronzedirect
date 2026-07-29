@@ -1,6 +1,17 @@
 // fmt.js — Formatting (dates, money, English labels).
 import { LOCALE, CURRENCY } from './config.js';
 
+// Active currency (overridable at runtime from company settings)
+let curCurrency = CURRENCY;
+let curLocale = LOCALE;
+const LOCALE_BY_CURRENCY = { GBP: 'en-GB', EUR: 'en-IE', USD: 'en-US', ISK: 'is-IS' };
+export function setCurrency(code) {
+  if (!code) return;
+  curCurrency = code;
+  curLocale = LOCALE_BY_CURRENCY[code] || LOCALE;
+}
+export function currentCurrency() { return curCurrency; }
+
 export const WO_TYPE = {
   install: 'Installation', repair: 'Repair', bulb_change: 'Bulb change',
   maintenance: 'Maintenance', inspection: 'Inspection', other: 'Other',
@@ -42,7 +53,7 @@ export function fmtDateTime(v) {
 }
 export function money(v) {
   if (v == null || v === '') return '';
-  return new Intl.NumberFormat(LOCALE, { style: 'currency', currency: CURRENCY, maximumFractionDigits: 2 }).format(Number(v));
+  return new Intl.NumberFormat(curLocale, { style: 'currency', currency: curCurrency, maximumFractionDigits: 2 }).format(Number(v));
 }
 
 // For <input type="datetime-local"> — returns 'YYYY-MM-DDTHH:mm' in local time.

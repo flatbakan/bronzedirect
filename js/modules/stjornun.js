@@ -4,7 +4,7 @@ import { sb } from '../supabase.js';
 import { isAdmin, getProfile } from '../auth.js';
 import { listChecklistTemplates } from '../db.js';
 import { modal, fieldRow, toast, confirmDialog, errorView } from '../ui.js';
-import { WO_TYPE } from '../fmt.js';
+import { WO_TYPE, setCurrency } from '../fmt.js';
 
 const ROLES = { admin: 'Administrator', technician: 'Technician', office: 'Office' };
 
@@ -140,6 +140,10 @@ function companyCard(co, onDone) {
     email: el('input', { value: co.email || '' }),
     labor_rate: el('input', { type: 'number', step: '0.01', value: co.labor_rate ?? '' }),
     default_bulb_life_hours: el('input', { type: 'number', step: '1', value: co.default_bulb_life_hours ?? '' }),
+    currency: el('select', {}, [
+      el('option', { value: 'GBP', selected: (co.currency || 'GBP') === 'GBP' }, 'GBP £ (United Kingdom)'),
+      el('option', { value: 'EUR', selected: co.currency === 'EUR' }, 'EUR € (Ireland)'),
+    ]),
   };
   const save = btn('Save settings', async () => {
     save.disabled = true;
@@ -153,10 +157,12 @@ function companyCard(co, onDone) {
       email: f.email.value.trim() || null,
       labor_rate: f.labor_rate.value ? Number(f.labor_rate.value) : null,
       default_bulb_life_hours: f.default_bulb_life_hours.value ? Number(f.default_bulb_life_hours.value) : null,
+      currency: f.currency.value,
       updated_at: new Date().toISOString(),
     }).eq('id', 1);
     save.disabled = false;
     if (error) { toast(error.message, 'err'); return; }
+    setCurrency(f.currency.value);
     toast('Settings saved.'); onDone && onDone();
   }, { class: 'btn-primary' });
 
@@ -172,6 +178,7 @@ function companyCard(co, onDone) {
       fieldRow('Email', f.email, true),
       fieldRow('Labour rate (per hour)', f.labor_rate),
       fieldRow('Default bulb life (hours)', f.default_bulb_life_hours),
+      fieldRow('Currency', f.currency, true),
     ]),
     el('div', { class: 'row', style: { marginTop: '12px' } }, save),
   ]);
