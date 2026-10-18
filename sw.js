@@ -1,15 +1,17 @@
 // sw.js — Bronze Direct service worker.
 // Stale-while-revalidate for same-origin assets (fast + auto-updates on next load).
 // Cross-origin (Supabase, esm.sh) always goes to the network — never cached.
-const CACHE = 'bd-v1';
+const CACHE = 'bd-v2';
 const ASSETS = [
   './', './index.html', './styles.css', './logobd.svg', './manifest.webmanifest',
   './js/app.js', './js/config.js', './js/supabase.js', './js/render.js', './js/auth.js',
   './js/router.js', './js/ui.js', './js/db.js', './js/fmt.js', './js/state.js',
+  './js/chart.js', './js/maintenance.js', './js/search-box.js', './js/inspection-templates.json',
   './js/modules/idag.js', './js/modules/dagatal.js', './js/modules/verkbeidnir.js',
   './js/modules/vidskiptavinir.js', './js/modules/taeki.js', './js/modules/tilkynningar.js',
   './js/modules/vorur.js', './js/modules/reikningar.js', './js/modules/stjornun.js',
-  './js/modules/signature.js',
+  './js/modules/maelabord.js', './js/modules/scan.js', './js/modules/signature.js',
+  './js/modules/install-report.js', './js/modules/annual-inspection.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-180.png',
 ];
 

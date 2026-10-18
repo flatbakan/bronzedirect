@@ -221,6 +221,14 @@ a.linkish:hover { text-decoration: underline; }
 .seg button.on.yes { background: var(--ok); }
 .seg button.on.no { background: var(--danger); color: #fff; }
 .seg button.on.na { background: var(--faint); color: var(--cream); }
+.seg button.on.pass { background: var(--ok); }
+.seg button.on.repaired { background: var(--warn); }
+.seg button.on.fault { background: var(--danger); color: #fff; }
+.insp-item { padding: 9px 0; border-bottom: 1px solid var(--line); }
+.insp-item .lbl { font-size: 14px; margin-bottom: 7px; }
+.insp-item .ctrl { display: flex; gap: 10px; align-items: center; }
+.insp-item .ctrl input { flex: 1; }
+.insp-sec-title { font-weight: 600; color: var(--brand-mid); font-size: 13px; text-transform: uppercase; letter-spacing: .1em; margin: 16px 0 2px; }
 .report-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
 @media (max-width: 720px) { .report-cols { grid-template-columns: 1fr; } }
 .report-warn { color: #ff9aa8; font-size: 12px; margin-top: 4px; }

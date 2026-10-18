@@ -1,0 +1,49 @@
+{
+  "power_tower": {
+    "name": "Power Tower",
+    "sections": [
+      { "title": "", "items": ["PIE in good working order", "Token box opened and all connections crimped with ferrules", "Isolators opened and checked for crimping at bed end"] },
+      { "title": "Left hand panel", "items": ["Capacitors", "Fuse terminal block", "Lamp holders"] },
+      { "title": "Right hand panel", "items": ["Capacitors", "Fuse terminal block", "Lamp holders"] },
+      { "title": "Back panel", "items": ["Capacitors", "Fuse terminal block", "Lamp holders"] },
+      { "title": "Door panel", "items": ["Capacitors", "Fuse terminal block", "Lamp holders"] },
+      { "title": "", "items": ["Ballasts all working", "Top box — check connections", "Emergency stop in working order", "Fan/extraction in working order", "Main contactors in good working order", "Tubes all working", "Floor condition", "Music (if available) in working order", "Grills (covering tubes)", "External coverings state"] }
+    ]
+  },
+  "ixtreme": {
+    "name": "iXtreme Plus",
+    "sections": [
+      { "title": "", "items": ["PIE in good working order", "Token box opened and all connections crimped with ferrules", "Isolators opened and checked for crimping at bed end"] },
+      { "title": "Left hand panel", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "Right hand panel", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "Back panel", "items": ["Display screen", "Lamp holders", "LED facials in working order", "Acrylic"] },
+      { "title": "Door panel", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "", "items": ["Ballasts all working (electronic)", "Check all connections on roof", "Emergency stop in working order", "Fan/extraction in working order", "Main contactors in good working order", "Tubes all working", "Display screen in working order", "Aqua & Aroma tested (if applicable)", "Floor condition", "Display lights inside and out in working order", "BT in working order", "Music (if available) in working order"] }
+    ]
+  },
+  "p9s": {
+    "name": "megaSun P9S",
+    "sections": [
+      { "title": "", "items": ["PIE in good working order", "Token box opened and all connections crimped with ferrules", "Isolators opened and checked for crimping at bed end"] },
+      { "title": "Base — inside", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "Side panel", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "Canopy — inside", "items": ["Display screen (internal)", "Lamp holders", "T8 lamps in order", "LED facials in working order", "Acrylic", "All fan vents in canopy present", "Shoulder sapphires in working order", "Outside display acrylics without damage", "All ruby display on and working"] },
+      { "title": "", "items": ["Ballasts all working (electronic)", "Safety switches", "Check all connections internally", "Emergency stop in working order", "Fan/extraction in working order & correct temperature set", "Main contactors in good working order", "Tubes all working", "Display screen in working order — outside canopy", "Aqua & Aroma & jets tested", "Display lights inside and out in working order", "BT in working order", "Canopy adjustment OK", "All filters cleaned", "Music (if available) in working order"] }
+    ]
+  },
+  "k11": {
+    "name": "megaSun K11",
+    "sections": [
+      { "title": "", "items": ["PIE in good working order", "Token box opened and all connections crimped with ferrules", "Isolators opened and checked for crimping at bed end"] },
+      { "title": "Tube 1", "items": ["All LED panels working correctly", "Beauty LEDs working correctly", "Filters in working order and clean"] },
+      { "title": "Tube 2", "items": ["All LED panels working correctly", "Beauty LEDs working correctly", "Filters in working order and clean"] },
+      { "title": "Tube 3", "items": ["All LED panels working correctly", "Beauty LEDs working correctly", "Filters in working order and clean"] },
+      { "title": "Tube 4", "items": ["All LED panels working correctly", "Beauty LEDs working correctly", "Filters in working order and clean"] },
+      { "title": "Tube 5", "items": ["All LED panels working correctly", "Beauty LEDs working correctly", "Filters in working order and clean"] },
+      { "title": "Base — inside", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "Side panel", "items": ["Lamp holders", "Acrylic"] },
+      { "title": "Canopy — inside", "items": ["Display screen (internal)", "Acrylic on tubes", "All fan vents in canopy present"] },
+      { "title": "", "items": ["Electronic ballasts all working", "Safety switches", "Check all connections internally", "Emergency stop in working order", "Fan/extraction in working order & correct temperature set", "Main contactors in good working order", "Display screen in working order — outside canopy", "Aqua & Aroma & jets tested", "Display lights inside and out in working order", "BT in working order", "Canopy adjustment OK", "Music (if available) in working order"] }
+    ]
+  }
+}

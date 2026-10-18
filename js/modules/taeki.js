@@ -420,23 +420,37 @@ function docForm(asset, done) {
   });
 }
 
-// ---- Installation reports tab ----
+// ---- Reports & inspections tab ----
 async function tabReports(asset, content) {
-  const { data } = await sb.from('installation_reports').select('id,status,created_at,technician_signed_at')
-    .eq('equipment_id', asset.id).order('created_at', { ascending: false });
-  const rows = data || [];
+  const [repRes, inspRes] = await Promise.all([
+    sb.from('installation_reports').select('id,status,created_at').eq('equipment_id', asset.id).order('created_at', { ascending: false }),
+    sb.from('inspections').select('id,status,inspection_date,created_at,template').eq('equipment_id', asset.id).order('created_at', { ascending: false }).then((r) => r).catch(() => ({ data: [] })),
+  ]);
+  const reports = repRes.data || [];
+  const inspections = inspRes.data || [];
+  const statusBadge = (s) => el('span', { class: `badge ${s === 'completed' ? 'completed' : 'assigned'}` }, s === 'completed' ? 'Completed' : 'Draft');
+
   mount(content, el('div', {}, [
-    el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
-      el('div', { class: 'muted', style: { fontSize: '13px' } }, 'KBL Installation Report (FOR0901-06)'),
-      btn('+ New installation report', () => { prefill.set({ equipmentId: asset.id }); navigate('/report/new'); }, { class: 'btn-primary btn-sm' }),
-    ]),
-    rows.length ? el('div', {}, rows.map((r) => el('a', { class: 'list-item', href: `#/report/${r.id}` }, [
-      el('div', { class: 'grow' }, [
-        el('div', { class: 'title' }, 'Installation report'),
-        el('div', { class: 'sub' }, fmtDate(r.created_at)),
+    el('div', { class: 'card' }, [
+      el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
+        el('div', {}, [el('h3', { style: { margin: 0 } }, 'Installation reports'), el('div', { class: 'muted', style: { fontSize: '12px' } }, 'KBL FOR0901-06')]),
+        btn('+ New', () => { prefill.set({ equipmentId: asset.id }); navigate('/report/new'); }, { class: 'btn-ghost btn-sm' }),
       ]),
-      el('span', { class: `badge ${r.status === 'completed' ? 'completed' : 'assigned'}` }, r.status === 'completed' ? 'Completed' : 'Draft'),
-    ]))) : el('div', { class: 'empty' }, 'No installation reports yet.'),
+      reports.length ? el('div', {}, reports.map((r) => el('a', { class: 'list-item', href: `#/report/${r.id}` }, [
+        el('div', { class: 'grow' }, [el('div', { class: 'title' }, 'Installation report'), el('div', { class: 'sub' }, fmtDate(r.created_at))]),
+        statusBadge(r.status),
+      ]))) : el('div', { class: 'muted' }, 'None yet.'),
+    ]),
+    el('div', { class: 'card' }, [
+      el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '10px' } }, [
+        el('div', {}, [el('h3', { style: { margin: 0 } }, 'Annual inspections'), el('div', { class: 'muted', style: { fontSize: '12px' } }, 'Fill the yearly service check in-app')]),
+        btn('+ New', () => { prefill.set({ equipmentId: asset.id }); navigate('/inspection/new'); }, { class: 'btn-primary btn-sm' }),
+      ]),
+      inspections.length ? el('div', {}, inspections.map((r) => el('a', { class: 'list-item', href: `#/inspection/${r.id}` }, [
+        el('div', { class: 'grow' }, [el('div', { class: 'title' }, 'Annual inspection'), el('div', { class: 'sub' }, fmtDate(r.inspection_date || r.created_at))]),
+        statusBadge(r.status),
+      ]))) : el('div', { class: 'muted' }, 'None yet.'),
+    ]),
   ]));
 }
 
